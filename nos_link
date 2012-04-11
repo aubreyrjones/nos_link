@@ -1,0 +1,13 @@
+require 'rubygems'
+require 'trollop'
+
+$config = Trollop::options do
+  banner <<-EOS
+USAGE: nos_link -o output_binary assembly_module [space separated list of additional modules]
+EOS
+  opt :output_binary, "Name of the output x10b-format binary.", :type => :string
+end
+
+Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
+
+

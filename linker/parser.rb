@@ -16,15 +16,30 @@ VALUES = {}
 
 declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
-declare(REGISTERS, 0, "a b c x y z i h")
+declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc O")
 
-INDIRECT_OFFSET = 0x08
-INDIRECT_NEXT = 0x1e
+REGISTER_RE = /^([#{REGISTERS.keys.join('')}])$/
+INDIRECT_RE = /\[(.*)\]/
+
+VALUE_RE = /^(#{VALUES.keys.join('|')})$/
+
+INDIRECT_REGISTER = 0x08
+INDIRECT_REG_NEXT = 0x10
+
+NEXT_INDIRECT = 0x1e
 NEXT_LITERAL = 0x1f
-SHORT_LITERAL = 0x20
+
 
 $DONT_STOP_ON_ERROR = false
+
+class ParamError
+  attr_accessor :msg, :param
+  def initialize(message, param)
+    @msg = message
+    @param = param
+  end
+end
 
 def parse_error_stop(reason, source_file, line_number, line)
   puts "FATAL LINK ERROR"
@@ -35,19 +50,52 @@ def parse_error_stop(reason, source_file, line_number, line)
 end
 
 class Instruction
-  attr_accessor :opcode, :a, :b, :a_word, :b_word, :source, :line
+  attr_accessor :opcode, :a, :b, :next_words, :source, :line
   
   def initialize(opcode_token, param_a, param_b, labels, source_file, line_number)
     @opcode_token = opcode_token
     @param_a = param_a
     @param_b = param_b
-    @sourece = source_file
+    @source = source_file
     @line = line_number
     @labels = labels
+
+    @op = INSTRUCTIONS[@opcode_token]
+
+    if @op.nil? 
+      @op = EXTENDED_INSTRUCTIONS[@opcode_token]
+      @extended = true
+    end
+
+    @a = parse_param(@param_a)
+    @b = parse_param(@param_b) unless @extended
+
+    @next_words = []
+  end
+
+  def parse_param(param_token)
+    indirect = param_token =~ INDIRECT_RE
+    if indirect
+      param_token = $1.strip
+    end
+    
+    if param_token =~ REGISTER_RE #it's a register
+      reg_code = REGISTERS[$1]
+      return REGISTERS[$1] + (indirect ? INDIRECT_REGISTER : 0)
+    elsif param_token =~ VALUE_RE #it's one of the special magic values
+      if indirect
+        raise ParamError.new("#{param_token} cannot be used for indirection.", param_token)
+      end
+      return VALUES[param_token]
+    end
+
+    puts "Don't know how to handle: #{param_token}"
+
+    return -1
   end
 
   def orig
-    "#{@labels.join("\n")} #{@opcode_token} #{@param_a}, #{@param_b}"
+    "#{@op.to_s} #{@a.to_s} #{@b.to_s} : #{@labels.join("\n")} #{@opcode_token} #{@param_a}, #{@param_b}"
   end
 end
 
@@ -65,7 +113,7 @@ class ObjectModule
 
   EXT_INSTR_RE = /^(:[a-zA-Z0-9\._]+|\s*)(\w+)\s+(.+)$/
 
-
+  attr_accessor :lines
   #Create a module from source lines.
   def initialize(file_name, source_lines)
     @filename = file_name
@@ -110,11 +158,13 @@ class ObjectModule
         last_global_label, label = globalize_label(last_global_label, label, line_number, line)
         pending_labels << label
       end
-      
-      instr = Instruction.new(instruction, param_a, param_b, pending_labels, @filename, line_number)
-      pending_labels = []
-      puts instr.orig
-    
+      begin
+        instr = Instruction.new(instruction, param_a, param_b, pending_labels, @filename, line_number)
+        pending_labels = []
+        puts instr.orig
+      rescue ParamError => e
+        parse_error_stop(e.msg, @filename, line_number, line)
+      end
     end
 
   end
@@ -132,7 +182,7 @@ class ObjectModule
   end
 end
 
-$DONT_STOP_ON_ERROR = true
+# $DONT_STOP_ON_ERROR = true
 
 if __FILE__ == $PROGRAM_NAME
   filename = "#{ARGV.first || "out.s"}"
@@ -143,6 +193,7 @@ if __FILE__ == $PROGRAM_NAME
 
   unless om.nil?
     om.normalize
+#    puts om.lines
     om.parse
   end
 end

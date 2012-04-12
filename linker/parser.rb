@@ -23,22 +23,6 @@ def declare(map, start, string)
 end
 
 
-#definition of a legal label or source symbol
-LABEL_RE = /[a-z0-9\._]+/i
-
-#Label definition
-LABEL_DEF_RE = /^\s*:(#{LABEL_RE})/i
-
-# :label instruction operand, operand
-LINE_RE = /#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)\s*,\s*(.+)$/i
-
-# hidden global variables
-HIDDEN_SYM_RE = /^\.(hidden|private)\s+([a-z0-9\._]+)/i
-
-EXT_INSTR_RE = /^(\w+)\s+(.+)$/i
-
-HEX_RE = /^0x([0-9a-fA-F]+)$/
-INT_RE = /^(\d+)$/
 
 INSTRUCTIONS = {}
 EXTENDED_INSTRUCTIONS = {}
@@ -49,6 +33,28 @@ declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn if
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc O")
+
+HEX_RE = /0x([0-9a-f]+)/i
+INT_RE = /(\d+)/
+
+#definition of a legal label or source symbol
+LABEL_RE = /[a-z0-9\._]+/i
+
+#Label definition
+LABEL_DEF_RE = /^\s*:(#{LABEL_RE})/i
+
+# :label instruction operand, operand
+LINE_RE = /#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)\s*,\s*(.+)$/i
+
+# hidden global variables
+HIDDEN_SYM_RE = /\.(hidden|private)\s+(#{LABEL_RE})/i
+
+# an unsigned data word
+DATA_WORD_RE = /\.(word|uint16_t)\s+(\w+)/
+
+#an extended instruction (taking only one parameter)
+EXT_INSTR_RE = /^#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)$/i
+
 
 INSTR_RE = /#{INSTRUCTIONS.keys.join('|')}/i
 
@@ -78,7 +84,7 @@ end
 class Instruction
   attr_accessor :opcode, :a, :b, :next_words, :source, :line, :defined_symbols
   
-  def initialize(opcode_token, param_a, param_b, defined_symbols, source_file, line_number)
+  def initialize(module_name, global_scope, opcode_token, param_a, param_b, defined_symbols, source_file, line_number)
     @opcode_token = opcode_token
     @param_a = param_a
     @param_b = param_b
@@ -131,7 +137,8 @@ end
 
 class InlineData
   attr_accessor :data_words
-  def initialize
+  def initialize(module_name)
+    @mod_name = module_name
     @data_words = []
   end
 
@@ -284,7 +291,7 @@ class ObjectModule
 
   def delete_dependent_entries(table, symbol)
     symbol.dependent_locals.each do |dep|
-      table.delete(dep)
+      table.delete(dep.name)
     end
   end
 

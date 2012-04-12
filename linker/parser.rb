@@ -191,7 +191,7 @@ class ObjectModule
   end
 
   #Resolve a symbol in the current tables.
-  def resolve(symbol_name, current_global = nil)
+  def resolve(symbol_name, current_global = nil, filename)
     resolve_name = symbol_name
     if label.start_with?('.')
       if current_global.nil?
@@ -226,17 +226,21 @@ class ObjectModule
         puts "Defined #{defined_symbol.name}"
         @module_symbols[defined_symbol.name] = defined_symbol
         last_global_symbol = defined_symbol if parent.nil?
-      elsif line =~ LINKAGE_RE
+      elsif line =~ HIDDEN_SYM_RE
         hidden_symbol = $2
         @module_private_symbols << hidden_symbol
       end
     end
   end
 
+  def mangle_and_merge
+    
+  end
+
   def assemble
 
     pending_symbols = []
-    last_global_symbol = nil
+    last_global_symbol = nil #might also be hidden
 
     @lines.each_with_index do |line, line_number|
 

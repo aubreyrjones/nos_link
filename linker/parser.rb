@@ -22,6 +22,21 @@ def declare(map, start, string)
   end
 end
 
+
+#definition of a legal label or source symbol
+LABEL_RE = /[a-z0-9\._]+/i
+
+#Label definition
+LABEL_DEF_RE = /^\s*:(#{LABEL_RE})/i
+
+# :label instruction operand, operand
+LINE_RE = /#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)\s*,\s*(.+)$/i
+
+# hidden global variables
+HIDDEN_SYM_RE = /^\.(hidden|private)\s+([a-z0-9\._]+)/i
+
+EXT_INSTR_RE = /^(\w+)\s+(.+)$/i
+
 HEX_RE = /^0x([0-9a-fA-F]+)$/
 INT_RE = /^(\d+)$/
 
@@ -35,11 +50,12 @@ declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc O")
 
+INSTR_RE = /#{INSTRUCTIONS.keys.join('|')}/i
 
-REGISTER_RE = /^([#{REGISTERS.keys.join('')}])$/i
+REGISTER_RE = /[#{REGISTERS.keys.join('')}]/i
+VALUE_RE = /#{VALUES.keys.join('|')}/
+
 INDIRECT_RE = /\[(.*)\]/i
-
-VALUE_RE = /^(#{VALUES.keys.join('|')})$/
 
 INDIRECT_REGISTER = 0x08
 INDIRECT_REG_NEXT = 0x10
@@ -114,7 +130,22 @@ class Instruction
 end
 
 class InlineData
-  
+  attr_accessor :data_words
+  def initialize
+    @data_words = []
+  end
+
+  def <<(data)
+    @data_words << data
+  end
+
+  def length
+    @data_words.size
+  end
+
+  def to_s
+    @data_words.map{|word| ".word #{word.to_s}"}.join("\n")
+  end
 end
 
 LINKAGE_VISIBILITY = [:global, :local, :hidden]
@@ -132,6 +163,7 @@ class AsmSymbol
     @first_file = first_file
     @parent = parent_symbol
     @linkage_vis = parent_symbol.nil? ? :global : :local
+    @dependent_locals = []
   end
 
   def define(instruction)
@@ -139,7 +171,15 @@ class AsmSymbol
   end
 
   def make_hidden
-    @likage_vis = :hidden
+    @linkage_vis = :hidden
+  end
+
+  def attach_local(local_sym)
+    @dependent_locals << local_sym
+  end
+
+  def dependent_locals
+    @dependent_locals
   end
 
   def name
@@ -161,22 +201,17 @@ class AsmSymbol
     return "#{parent_symbol.name}$$#{label}"
   end
 
-  def self.make_private_name(filename, parent, name)
-      return "#{filename}$$#{name}"
+  def self.make_private_name(filename, name)
+      return "#{make_module_name(filename)}$$#{name}"
+  end
+
+  def self.make_module_name(filename)
+    filename.gsub(/^\.+/, '').gsub('/', '_')
   end
 end
 
 #Represents a single .S module file.
 class ObjectModule
-
-  #Label on a line by itself
-  LABEL_RE = /^:([a-z0-9\._]+)/i
-  # :label instruction operand, operand
-  LINE_RE = /^\s*(:[a-z0-9\._]+|\s*)(\w+)\s+(.+)\s*,\s*(.+)$/i
-  # hidden global variables
-  HIDDEN_SYM_RE = /^\.(hidden|private)\s+([a-z0-9\._])/i
-
-  EXT_INSTR_RE = /^(:[a-zA-Z0-9\._]+|\s*)(\w+)\s+(.+)$/
 
   attr_accessor :lines
   #Create a module from source lines.
@@ -216,14 +251,14 @@ class ObjectModule
   end
 
   def empty_line(line)
-    return (line.empty? || line =~ /^\s+$/) #skip empty lines or whitespace lines
+    return (line.nil? || line.empty? || line =~ /^\s+$/) #skip empty lines or whitespace lines
   end
 
   def definitions_pass
     last_global_symbol = nil
     @lines.each_with_index do |line, line_number|
       next if empty_line(line)
-      if line =~ LABEL_RE || line =~ LINE_RE
+      if line =~ LABEL_DEF_RE || line =~ LINE_RE
         if empty_line($1)
           next
         end
@@ -233,13 +268,29 @@ class ObjectModule
           parent = last_global_symbol
         end
         defined_symbol = AsmSymbol.new(@filename, label, parent)
-        puts "Defined #{defined_symbol.name}"
         @module_symbols[defined_symbol.name] = defined_symbol
-        last_global_symbol = defined_symbol if parent.nil?
+        if parent.nil? #it's a global
+          last_global_symbol = defined_symbol
+        else #it's a local, attach dependency.
+          last_global_symbol.attach_local(defined_symbol) 
+        end
+
       elsif line =~ HIDDEN_SYM_RE
         hidden_symbol = $2
         @module_private_symbols << hidden_symbol
       end
+    end
+  end
+
+  def delete_dependent_entries(table, symbol)
+    symbol.dependent_locals.each do |dep|
+      table.delete(dep)
+    end
+  end
+
+  def add_dependent_entries(table, symbol)
+    symbol.dependent_locals.each do |dep|
+      table[dep.name] = dep
     end
   end
 
@@ -252,8 +303,10 @@ class ObjectModule
         next
       end
       old_name = symbol.name
-      @module_symbols[old_name] = nil
+      @module_symbols.delete(old_name)
+      delete_dependent_entries(@module_symbols, symbol)
       symbol.make_hidden
+      add_dependent_entries(@module_symbols, symbol)
       @module_symbols[symbol.name] = symbol
     end
 
@@ -282,7 +335,7 @@ class ObjectModule
         next
       end
 
-      if line =~ LABEL_RE #this is a standalone symbol definition
+      if line =~ LABEL_DEF_RE #this is a standalone symbol definition
         
       end
 
@@ -312,6 +365,11 @@ class ObjectModule
   #Parse the source file into an abstract representation.
   def parse
     definitions_pass()
+    mangle_and_merge
+    puts "Symbol table:"
+    @program_symbols.each_key do |k|
+      puts k
+    end
   end
 
   def globalize_label(last_global_label, this_label, line_number, line)

@@ -150,7 +150,7 @@ class AsmSymbol
       return AsmSymbol::make_local_name(@parent, @orig_name)
     when :hidden
       #the first file will always be the correct file for private symbols.
-      return AsmSymbol::make_private_name(@first_file, @parent, @orig_name)
+      return AsmSymbol::make_private_name(@first_file, @orig_name)
     else 
       puts "Unsupported linkage visibility of #{@linkage_vis}"
       exit 1
@@ -162,7 +162,7 @@ class AsmSymbol
   end
 
   def self.make_private_name(filename, parent, name)
-      return "#{filename}$$#{parent.name}$$#{name}"
+      return "#{filename}$$#{name}"
   end
 end
 
@@ -195,18 +195,24 @@ class ObjectModule
   end
 
   #Resolve a symbol in the current tables.
-  def resolve(symbol_name, current_global = nil, filename)
-    resolve_name = symbol_name
-    if label.start_with?('.')
+  def resolve(filename, symbol_name, current_global = nil)
+    if label.start_with?('.') #local label
       if current_global.nil?
         puts "Cannot locate local symbol without global context."
         exit 1
       end
       resolve_name = AsmSymbol::make_local_name(current_global, symbol_name)
+      return @program_symbols[resolve_name]
+    else #global label
+      #check for a module-private definition
+      private_name = AsmSymbol::make_private_name(filename, symbol_name)
+      symbol = @program_symbols[private_name]
+      return symbol unless symbol.nil?
+      
+      #check for a global definition
+      symbol = @program_symbols[symbol_name]
+      return symbol
     end
-    ###TODO not actually going to resolve anything right now
-    "NO RESOLVE YET"
-    exit 1
   end
 
   def empty_line(line)
@@ -238,10 +244,11 @@ class ObjectModule
   end
 
   def mangle_and_merge
+    #mangle the private names
     @module_private_symbols.each do |symbol_name|
       symbol = @module_symbols[symbol_name]
       if symbol.nil?
-        puts "Warning: Setting visibility of undefined symbol, or reset visibility: #{symbol_name}. Skipping."
+        puts "Warning: Setting visibility of undefined symbol: #{symbol_name}. Skipping."
         next
       end
       old_name = symbol.name
@@ -251,6 +258,17 @@ class ObjectModule
     end
 
     #next step: merge upward to the program scope.
+    @module_symbols.each_pair do |name, sym|
+      existing_def = @program_symbols[name]
+      if existing_def.nil?
+        @program_symbols[name] = sym
+        next
+      end
+      if existing_def.is_defined?
+        puts "Warning: Attempting to redefine symbol #{name}. Skipping redefinition."
+        next
+      end
+    end
   end
 
   def assemble

@@ -138,6 +138,10 @@ class AsmSymbol
     @def_instr = instruction
   end
 
+  def make_hidden
+    @likage_vis = :hidden
+  end
+
   def name
     case @linkage_vis
     when :global
@@ -234,7 +238,19 @@ class ObjectModule
   end
 
   def mangle_and_merge
-    
+    @module_private_symbols.each do |symbol_name|
+      symbol = @module_symbols[symbol_name]
+      if symbol.nil?
+        puts "Warning: Setting visibility of undefined symbol, or reset visibility: #{symbol_name}. Skipping."
+        next
+      end
+      old_name = symbol.name
+      @module_symbols[old_name] = nil
+      symbol.make_hidden
+      @module_symbols[symbol.name] = symbol
+    end
+
+    #next step: merge upward to the program scope.
   end
 
   def assemble

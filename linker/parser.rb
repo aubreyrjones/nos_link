@@ -1,3 +1,19 @@
+class InvalidOp
+  attr_accessor :msg, :op
+  def initialize(message, op)
+    @msg = message
+    @op = op
+  end
+end
+
+class ParamError
+  attr_accessor :msg, :param
+  def initialize(message, param)
+    @msg = message
+    @param = param
+  end
+end
+
 def declare(map, start, string)
   count = start
   string.split(" ").each do |token|
@@ -19,8 +35,9 @@ declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc O")
 
-REGISTER_RE = /^([#{REGISTERS.keys.join('')}])$/
-INDIRECT_RE = /\[(.*)\]/
+
+REGISTER_RE = /^([#{REGISTERS.keys.join('')}])$/i
+INDIRECT_RE = /\[(.*)\]/i
 
 VALUE_RE = /^(#{VALUES.keys.join('|')})$/
 
@@ -33,13 +50,6 @@ NEXT_LITERAL = 0x1f
 
 $DONT_STOP_ON_ERROR = false
 
-class ParamError
-  attr_accessor :msg, :param
-  def initialize(message, param)
-    @msg = message
-    @param = param
-  end
-end
 
 def parse_error_stop(reason, source_file, line_number, line)
   puts "FATAL LINK ERROR"
@@ -50,20 +60,24 @@ def parse_error_stop(reason, source_file, line_number, line)
 end
 
 class Instruction
-  attr_accessor :opcode, :a, :b, :next_words, :source, :line
+  attr_accessor :opcode, :a, :b, :next_words, :source, :line, :defined_symbols
   
-  def initialize(opcode_token, param_a, param_b, labels, source_file, line_number)
+  def initialize(opcode_token, param_a, param_b, defined_symbols, source_file, line_number)
     @opcode_token = opcode_token
     @param_a = param_a
     @param_b = param_b
     @source = source_file
     @line = line_number
-    @labels = labels
+    @defined_symbols = defined_symbols
 
     @op = INSTRUCTIONS[@opcode_token]
 
     if @op.nil? 
       @op = EXTENDED_INSTRUCTIONS[@opcode_token]
+      if @op.nil?
+        puts "Unknown instruction."
+        exit 1
+      end
       @extended = true
     end
 
@@ -99,17 +113,64 @@ class Instruction
   end
 end
 
-class DataWords
+class InlineData
   
+end
+
+LINKAGE_VISIBILITY = [:global, :local, :hidden]
+#A symbol. It might or might not be defined.
+#By default, all symbols have a global visibility
+#
+#Private symbols are mangled before insertion into
+#the program assembly. Not before.
+#
+#
+class AsmSymbol
+  attr_reader :orig_name, :def_instr, :linkage_vis, :first_file
+  def initialize(first_file, orig_name, parent_symbol = nil)
+    @orig_name = orig_name
+    @first_file = first_file
+    @parent = parent_symbol
+    @linkage_vis = parent_symbol.nil? ? :global : :local
+  end
+
+  def define(instruction)
+    @def_instr = instruction
+  end
+
+  def name
+    case @linkage_vis
+    when :global
+      return @orig_name
+    when :local
+      return AsmSymbol::make_local_name(@parent, @orig_name)
+    when :hidden
+      #the first file will always be the correct file for private symbols.
+      return AsmSymbol::make_private_name(@first_file, @parent, @orig_name)
+    else 
+      puts "Unsupported linkage visibility of #{@linkage_vis}"
+      exit 1
+    end
+  end
+
+  def self.make_local_name(parent_symbol, label)
+    return "#{parent_symbol.name}$$#{label}"
+  end
+
+  def self.make_private_name(filename, parent, name)
+      return "#{filename}$$#{parent.name}$$#{name}"
+  end
 end
 
 #Represents a single .S module file.
 class ObjectModule
 
   #Label on a line by itself
-  LABEL_RE = /^:([a-zA-Z0-9\._]+)/
+  LABEL_RE = /^:([a-z0-9\._]+)/i
   # :label instruction operand, operand
-  LINE_RE = /^\s*(:[a-zA-Z0-9\._]+|\s*)(\w+)\s+(.+)\s*,\s*(.+)$/
+  LINE_RE = /^\s*(:[a-z0-9\._]+|\s*)(\w+)\s+(.+)\s*,\s*(.+)$/i
+  # hidden global variables
+  HIDDEN_SYM_RE = /^\.(hidden|private)\s+([a-z0-9\._])/i
 
   EXT_INSTR_RE = /^(:[a-zA-Z0-9\._]+|\s*)(\w+)\s+(.+)$/
 
@@ -119,18 +180,63 @@ class ObjectModule
     @filename = file_name
     @lines = source_lines
     @instructions = []
-    @defined_symbols = {}
+    @module_symbols = {}
+    @program_symbols = {}
+    @module_private_symbols = []
   end
 
   #Clean and normalize the source
   def normalize
-    @lines.map! {|line| line.gsub(/;.*/, '').gsub(/\s+/, ' ').strip.downcase}
+    @lines.map! {|line| line.gsub(/;.*$/, '').gsub(/\s+/, ' ').strip}
   end
-  
-  #Parse the source file into an abstract representation.
-  def parse
-    last_global_label = nil
-    pending_labels = []
+
+  #Resolve a symbol in the current tables.
+  def resolve(symbol_name, current_global = nil)
+    resolve_name = symbol_name
+    if label.start_with?('.')
+      if current_global.nil?
+        puts "Cannot locate local symbol without global context."
+        exit 1
+      end
+      resolve_name = AsmSymbol::make_local_name(current_global, symbol_name)
+    end
+    ###TODO not actually going to resolve anything right now
+    "NO RESOLVE YET"
+    exit 1
+  end
+
+  def empty_line(line)
+    return (line.empty? || line =~ /^\s+$/) #skip empty lines or whitespace lines
+  end
+
+  def definitions_pass
+    last_global_symbol = nil
+    @lines.each_with_index do |line, line_number|
+      next if empty_line(line)
+      if line =~ LABEL_RE || line =~ LINE_RE
+        if empty_line($1)
+          next
+        end
+        label = $1.strip
+        parent = nil
+        if label.start_with?('.')
+          parent = last_global_symbol
+        end
+        defined_symbol = AsmSymbol.new(@filename, label, parent)
+        puts "Defined #{defined_symbol.name}"
+        @module_symbols[defined_symbol.name] = defined_symbol
+        last_global_symbol = defined_symbol if parent.nil?
+      elsif line =~ LINKAGE_RE
+        hidden_symbol = $2
+        @module_private_symbols << hidden_symbol
+      end
+    end
+  end
+
+  def assemble
+
+    pending_symbols = []
+    last_global_symbol = nil
 
     @lines.each_with_index do |line, line_number|
 
@@ -138,11 +244,8 @@ class ObjectModule
         next
       end
 
-      if line =~ LABEL_RE #this is a standalone label and must be saved
-        label = $1
-        last_global_label, label = globalize_label(last_global_label, label, line_number, line)
-        pending_labels << label
-        next #next line please!
+      if line =~ LABEL_RE #this is a standalone symbol definition
+        
       end
 
       unless line =~ LINE_RE || line =~ EXT_INSTR_RE
@@ -150,7 +253,7 @@ class ObjectModule
       end
 
       label = $1
-      instruction = $2
+      instruction = $2.downcase
       param_a = $3
       param_b = $4
       
@@ -166,7 +269,11 @@ class ObjectModule
         parse_error_stop(e.msg, @filename, line_number, line)
       end
     end
+  end
 
+  #Parse the source file into an abstract representation.
+  def parse
+    definitions_pass()
   end
 
   def globalize_label(last_global_label, this_label, line_number, line)

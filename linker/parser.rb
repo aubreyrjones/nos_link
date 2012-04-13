@@ -17,6 +17,7 @@ class ParamError < Exception
   end
 end
 
+# stick consecutive name->number pairings into a hash
 def declare(map, start, string)
   count = start
   string.split(" ").each do |token|
@@ -47,8 +48,13 @@ VALUES.each_pair do |k, v|
   REV_VALS[v] = k
 end
 
+# Legal sections
 SECTIONS = "\\.data \\.text".split(" ")
+
+# Legal directives
 DIRECTIVES = "\\.private \\.hidden".split(" ")
+
+# Null directives (skipped)
 NULL_DIR = "\\.file \\.align \\.globl \\.global \\.local \\.extern".split(" ")
 
 HEX_RE = /^0x([0-9a-f]+)$/i
@@ -127,6 +133,8 @@ class Param
     parse_expression(param_expression)
   end
 
+  # Get a reconstructed textual representation of this parameter,
+  # without indirection brackets.
   def expr_to_s
     if @value
       return REV_VALS[@value]
@@ -153,11 +161,13 @@ class Param
     return buf.join("+")
   end
 
+  # Get a reconstructed textual rep of this parameter.
   def to_s
     template = @indirect ? "[%s]" : "%s"
     return template % expr_to_s
   end
 
+  # Does this parameter demand an additional word in the instruction?
   def needs_word?
     if !@value.nil?
       return false
@@ -165,10 +175,12 @@ class Param
     return @offset || @reference_token
   end
 
+  # Set the reference address for the parameter
   def resolve(ref_address)
     @reference_address = ref_address
   end
 
+  # Get the additional word of instruction needed, or nil if none necessary.
   def param_word
     if @reference_token
       if @reference_address.nil?
@@ -184,6 +196,7 @@ class Param
     return @offset
   end
   
+  # Get the addressing mode bits. These are the 'a' or 'b' in the dcpu16 instruction.
   def mode_bits
     if @value
       return @value
@@ -232,6 +245,7 @@ class Param
     exit
   end
   
+  # Set the offset from a numeric token.
   def set_offset(token)
     if token =~ HEX_RE
       @offset = $1.to_i(16)
@@ -240,6 +254,7 @@ class Param
     end
   end
 
+  # Set register from a register token.
   def set_register(token)
     @register = REGISTERS[token.downcase]
     if @register.nil?
@@ -247,10 +262,12 @@ class Param
     end
   end
 
+  # Set the referenced label.
   def set_reference_label(token)
     @reference_token = token
   end
 
+  # Parse the parameter expression.
   def parse_expression(expr)
     if expr =~ INDIRECT_RE
       expr = $1
@@ -324,10 +341,13 @@ class Instruction
     end
   end
 
+  # Fix this instruction to a particular address in the program.
   def fix(address)
     @address = address
   end
 
+  # Build the binary representation of the entire instruction,
+  # including any additional words.
   def realize
     @bytes = [opcode]
     if @a.needs_word?
@@ -339,14 +359,17 @@ class Instruction
     end
   end
 
+  # Get the size, in words, of the instruction.
   def size
     @size
   end
 
+  # Get the binary words for this instruction.
   def bytes
     @bytes
   end
 
+  # Get the opcode for this instruction.
   def opcode
     if @extended
       return 0x00 | (@op << 4) | (@a.mode_bits << 10)
@@ -354,6 +377,7 @@ class Instruction
     return @op | (@a.mode_bits << 4) | (@b.mode_bits << 10)
   end
 
+  # Reconstruct a string rep of this instruction.
   def to_s
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
@@ -401,26 +425,32 @@ class AsmSymbol
     @dependent_locals = []
   end
 
+  # Set the instruction or data word that defines this symbol.
   def define(instruction)
     @def_instr = instruction
   end
 
+  # Set the visibility to hidden/private
   def make_hidden
     @linkage_vis = :hidden
   end
 
+  # Is this a local symbol?
   def local?
     return @linkage_vis == :local
   end
 
+  # Attach a local symbol to this global scope.
   def attach_local(local_sym)
     @dependent_locals << local_sym
   end
 
+  # Get all dependent local symbols.
   def dependent_locals
     @dependent_locals
   end
-
+  
+  # Get the mangled name of this symbol.
   def name
     case @linkage_vis
     when :global
@@ -436,14 +466,17 @@ class AsmSymbol
     end
   end
 
+  # Mangle a local name.
   def self.make_local_name(parent_symbol, label)
     return "#{parent_symbol.name}$$#{label}"
   end
 
+  # Mangle a private name.
   def self.make_private_name(filename, name)
       return "#{make_module_name(filename)}$$#{name}"
   end
 
+  # Generate a module name from a filename.
   def self.make_module_name(filename)
     filename.gsub(/^\.+/, '').gsub('/', '_')
   end
@@ -455,7 +488,7 @@ class ObjectModule
   attr_accessor :instructions, :module_symbols, :program_symbols
 
 
-  #Create a module from source lines.
+  # Create a module from source lines.
   def initialize(file_name, source_lines)
     @filename = file_name
     @lines = source_lines
@@ -465,16 +498,18 @@ class ObjectModule
     @module_private_symbols = []
   end
 
-  #Clean and normalize the source
+  # Clean and normalize the source
   def normalize
     @lines.map! {|line| line.gsub(/;.*$/, '').gsub(/\s+/, ' ').strip}
   end
 
-
+  # Is this line empty?
   def empty_line(line)
     return (line.nil? || line.empty? || line =~ /^\s+$/) #skip empty lines or whitespace lines
   end
 
+  # Extract all symbols *defined* by this module.
+  # References are not handled at this stage.
   def definitions_pass
     last_global_symbol = nil
     @lines.each_with_index do |line, line_number|
@@ -503,18 +538,22 @@ class ObjectModule
     end
   end
 
+  # Remove all dependent entires of symbol from the table.
   def delete_dependent_entries(table, symbol)
     symbol.dependent_locals.each do |dep|
       table.delete(dep.name)
     end
   end
 
+  # Add all dependent entries of the symbol to this table.
   def add_dependent_entries(table, symbol)
     symbol.dependent_locals.each do |dep|
       table[dep.name] = dep
     end
   end
 
+  # Mangle all local and private names, and merge them into
+  # the program symbol table.
   def mangle_and_merge
     #mangle the private names
     @module_private_symbols.each do |symbol_name|
@@ -545,8 +584,15 @@ class ObjectModule
     end
   end
 
-  def parse_label_pending(label_def, last_global_symbol, pending_symbols)
 
+  # Used to define instructions, this function looks up the symbol corresponding
+  # to the given label_def according to resolution rules. It appends the located
+  # symbol to pending_symbols.
+  #
+  # If the resolved symbol is not local, then it is returned as the last global symbol.
+  # Otherwise, if the resolved symbol is local, then the given last_global_symbol
+  # will be returned.
+  def parse_label_pending(label_def, last_global_symbol, pending_symbols)
     retval = []
     new_local = false
     if label_def.start_with?('.')
@@ -562,16 +608,16 @@ class ObjectModule
     end
 
     pending_symbols << resolved_symbol
-    resolved_symbol.local? ? last_global_symbol : resolved_symbol
+    return resolved_symbol.local? ? last_global_symbol : resolved_symbol
   end
 
+  # Do the main pass through the code, implementing symbols and parsing instructions.
   def do_main_pass
     pending_symbols = []
     last_global_symbol = nil #might also be hidden
     current_section = :text
 
     @lines.each_with_index do |line, line_number|
-
       if empty_line(line)
         next
       end
@@ -641,33 +687,18 @@ class ObjectModule
     end
   end
 
-  #Parse the source file into an abstract representation.
+  # Parse the source file into an abstract representation.
   def parse
     normalize()
     definitions_pass()
     mangle_and_merge()
     do_main_pass()
-#    @program_symbols.each_pair do |k, sym|
-#      puts "#{k} -> #{sym.def_instr.to_s}"
-#    end
-    
   end
 
+  # Print a listing of this module.
   def print_listing
     outlines = @instructions.map {|ins| ins.to_s}
     puts outlines.join("\n")
-  end
-
-  def globalize_label(last_global_label, this_label, line_number, line)
-
-    if this_label.start_with?('.') #is it a local label
-      if last_global_label.nil?
-        parse_error_stop("Local label without preceding global label.", @filename, line_number, line)
-      end
-      return [last_global_label, "#{last_global_label}$$#{this_label}"]
-    end
-    
-    return [this_label, "#{this_label}"]
   end
 end
 

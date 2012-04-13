@@ -11,6 +11,7 @@ class Assemblinker
     @instructions = instructions
   end
 
+  # Fix all instructions into their address space.
   def fix
     assembled_address = 0
     @instructions.each do |instr|
@@ -19,6 +20,9 @@ class Assemblinker
     end
   end
 
+  # Resolve all instruction parameters.
+  # At this stage, the program is done in an abstract sense.
+  # All that's left is turning the abstract instructions into binary.
   def assemble
     @instructions.each do |instr|
       resolve_param(instr, instr.a)
@@ -26,12 +30,14 @@ class Assemblinker
     end
   end
 
+  # Have each instruction generate its binary code.
   def realize
     @instructions.each do |instr|
       instr.realize
     end
   end
 
+  # Write the binary into the given stream.
   def binary(output)
     if @instructions.size == 0
       puts "No instruction stream. Cannot create binary."
@@ -45,6 +51,7 @@ class Assemblinker
     end
   end
 
+  # Print a side-by-side assembly/binary listing.
   def print_hex_and_instr
     @instructions.each do |instr|
       instr_bytes = instr.bytes
@@ -53,6 +60,7 @@ class Assemblinker
     end
   end
 
+  # Resolve an instruction's parameter.
   def resolve_param(instr, param)
     if param.nil? || param.reference_token.nil?
       return

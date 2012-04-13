@@ -1,4 +1,5 @@
 require 'rubygems'
+require File.expand_path(File.dirname(__FILE__) + '/resolve.rb')
 
 class InvalidOp < Exception
   attr_accessor :msg, :op
@@ -34,7 +35,7 @@ VALUES = {}
 declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
-declare(VALUES, 0x18, "pop peek push sp pc O")
+declare(VALUES, 0x18, "pop peek push sp pc o")
 
 REV_REG = {}
 REGISTERS.each_pair do |k, v|
@@ -53,10 +54,8 @@ NULL_DIR = "\\.align \\.globl \\.global \\.local \\.extern".split(" ")
 HEX_RE = /0x([0-9a-f]+)/i
 DEC_RE = /(\d+)/
 
-LITERAL_RE = /HEX_RE|DEC_RE/
-
 #definition of a legal label or source symbol
-LABEL_RE = /[a-z0-9\._]+/i
+LABEL_RE = /[\._a-z]+[a-z0-9\._]+/i
 
 #Label definition
 LABEL_DEF_RE = /^\s*:(#{LABEL_RE})\s*/i
@@ -93,7 +92,7 @@ INDIRECT_RE = /\[(.*)\]/i
 
 #parameter expressions
 LABEL_CAP_RE = /(#{LABEL_RE})/
-REG_CAP_RE = /(#{REGISTER_RE})/
+REG_CAP_RE = /^(#{REGISTER_RE})$/
 
 INDIRECT_REG_OFFSET = 0x08
 INDIRECT_REG_NEXT_OFFSET = 0x10
@@ -128,7 +127,7 @@ class Param
     parse_expression(param_expression)
   end
 
-  def to_s
+  def expr_to_s
     if @value
       return REV_VALS[@value]
     end
@@ -138,13 +137,21 @@ class Param
     if @offset > 0
       buf << "0x#{@offset.to_s(16)}"
     end
+
     if @reference_token
       buf << reference_token
     end
+
     if @register
       buf << REV_REG[@register]
     end
+
     return buf.join("+")
+  end
+
+  def to_s
+    template = @indirect ? "[%s]" : "%s"
+    return template % expr_to_s
   end
 
   def needs_word?
@@ -154,16 +161,27 @@ class Param
     return @offset > 0x1f || @reference_token
   end
 
-  def param_word
-    puts "Bullshit param word."
-    return 0xffff
+  def resolve(ref_address)
+    @reference_address = ref_address
   end
 
+  def param_word
+    if @reference_token
+      if @reference_address.nil?
+        raise ParamError.new("Undefined reference to: #{@reference_token}", @token)
+      end
+      
+      return @offset + @reference_address
+    end
+    
+    return @offset
+  end
+  
   def mode_bits
     if @value
       return @value
     end
-
+    
     #     register cases:
     #    0x00-0x07: register (A, B, C, X, Y, Z, I or J, in that order)
     #    0x08-0x0f: [register]
@@ -172,14 +190,14 @@ class Param
       if !@indirect
         return @register #only literal register value
       end
-
+      
       if @offset > 0 || @reference_token #resove a label, or use a large offset
         return @register + INDIRECT_REG_NEXT_OFFSET 
       else
         return @register + INDIRECT_REG_OFFSET
       end
     end
-
+    
     #     reference cases, with no register
     #    0x1e: [next word]
     #    0x1f: next word (literal)
@@ -202,27 +220,20 @@ class Param
         return LITERAL_NEXT
       end
     end
-
-#    puts "NOPE "
-#    puts @value
-#    puts @register
-#    puts @reference_token
-#    puts @offset
-#    exit 21
   end
-
+  
   def set_offset(token)
     if token =~ HEX_RE
       @offset = $1.to_i(16)
-    else
+    else token =~ DEC_RE
       @offset = $1.to_i(10)
     end
   end
 
   def set_register(token)
-    @register = REGISTERS[token]
+    @register = REGISTERS[token.downcase]
     if @register.nil?
-      raise ParamError("Unknown register.", token)
+      raise ParamError.new("Unknown register.", token)
     end
   end
 
@@ -249,13 +260,14 @@ class Param
     end
 
     tokens.each do |tok|
-      if tok =~ LITERAL_RE
+      if tok =~ HEX_RE || tok =~ DEC_RE
         set_offset(tok)
+      elsif tok =~ REG_CAP_RE
+        set_register($1)
       elsif tok =~ LABEL_CAP_RE
         set_reference_label(tok)
-      elsif tok =~ REG_CAP_RE
-        set_register_token($1)
       else
+        puts tok
         raise ParamError.new("Bad token.", expr)
       end
     end
@@ -264,7 +276,8 @@ class Param
 end
 
 class Instruction
-  attr_accessor :opcode, :a, :b, :source, :line, :defined_symbols
+  attr_reader :address
+  attr_accessor :opcode, :a, :b, :source, :scope, :line, :defined_symbols
   
   def initialize(source_file, global_scope, labels, opcode_token, param_a, param_b, line_number)
     @opcode_token = opcode_token
@@ -275,7 +288,7 @@ class Instruction
     @line = line_number
     @defined_symbols = labels
     @module = AsmSymbol::make_module_name(source_file)
-
+    
     @op = INSTRUCTIONS[@opcode_token]
     @size = 1
 
@@ -287,20 +300,41 @@ class Instruction
       end
       @extended = true
     end
-
+    
     @a = Param.new(@param_a)
     if @a.needs_word?
       @size += 1
     end
     
-    @b = Param.new(@param_b)
-    if @b.needs_word?
-      @size += 1
+    unless @extended
+      @b = Param.new(@param_b)
+      if @b.needs_word?
+        @size += 1
+      end
+    end
+  end
+
+  def fix(address)
+    @address = address
+  end
+
+  def realize(symbol_table)
+    @bytes = [@op]
+    if @a.needs_word?
+      @bytes << @a.param_word
+    end
+
+    if @b && @b.needs_word?
+      @bytes << @b.param_word
     end
   end
 
   def size
     @size
+  end
+
+  def bytes
+    @bytes
   end
 
   def opcode
@@ -309,12 +343,11 @@ class Instruction
 
   def to_s
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
-    "#{labels}\n\t#{@opcode_token} #{@a.to_s}, #{@b.to_s}"
+    labels << "\n" unless labels.empty?
+    addr_line = @address ? "\t; " + address.to_s : ''
+    return "#{labels}\t#{@opcode_token} #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
   end
 
-  def orig
-    "#{@op.to_s} #{@a.to_s} #{@b.to_s} : #{@labels.join("\n")} #{@opcode_token} #{@param_a}, #{@param_b}"
-  end
 end
 
 class InlineData
@@ -333,7 +366,7 @@ class InlineData
   end
 
   def to_s
-    @data_words.map{|word| ".word #{word.to_s}"}.join("\n")
+    @data_words.map{|word| ".word #{word.to_s}"}
   end
 end
 
@@ -405,8 +438,10 @@ end
 
 #Represents a single .S module file.
 class ObjectModule
+  attr_reader :filename, :lines
+  attr_accessor :instructions, :module_symbols, :program_symbols
 
-  attr_accessor :lines
+
   #Create a module from source lines.
   def initialize(file_name, source_lines)
     @filename = file_name
@@ -422,26 +457,6 @@ class ObjectModule
     @lines.map! {|line| line.gsub(/;.*$/, '').gsub(/\s+/, ' ').strip}
   end
 
-  #Resolve a symbol in the current tables.
-  def resolve(filename, symbol_name, current_global = nil)
-    if symbol_name.start_with?('.') #local label
-      if current_global.nil?
-        puts "Cannot locate local symbol without global context. #{filename}, #{symbol_name}"
-        exit 1
-      end
-      resolve_name = AsmSymbol::make_local_name(current_global, symbol_name)
-      return @program_symbols[resolve_name]
-    else #global label
-      #check for a module-private definition
-      private_name = AsmSymbol::make_private_name(filename, symbol_name)
-      symbol = @program_symbols[private_name]
-      return symbol unless symbol.nil?
-      
-      #check for a global definition
-      symbol = @program_symbols[symbol_name]
-      return symbol
-    end
-  end
 
   def empty_line(line)
     return (line.nil? || line.empty? || line =~ /^\s+$/) #skip empty lines or whitespace lines
@@ -523,10 +538,10 @@ class ObjectModule
     new_local = false
     if label_def.start_with?('.')
       new_local = true
-      resolved_symbol = resolve(@filename, label_def, last_global_symbol)
+      resolved_symbol = resolve(@program_symbols, @filename, label_def, last_global_symbol)
     else
       new_local = false
-      resolved_symbol = resolve(@filename, label_def, nil)
+      resolved_symbol = resolve(@program_symbols, @filename, label_def, nil)
     end
     if resolved_symbol.nil?
       puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
@@ -537,7 +552,7 @@ class ObjectModule
     resolved_symbol.local? ? last_global_symbol : resolved_symbol
   end
 
-  def assemble
+  def do_main_pass
     pending_symbols = []
     last_global_symbol = nil #might also be hidden
     current_section = :text
@@ -590,6 +605,9 @@ class ObjectModule
       param_a = $3
       param_b = $4
       
+      param_a.strip if param_a
+      param_b.strip if param_b
+
       unless empty_line(label)
         label_def = $1.strip
         last_global_symbol = parse_label_pending(label_def, last_global_symbol, pending_symbols)
@@ -612,9 +630,10 @@ class ObjectModule
 
   #Parse the source file into an abstract representation.
   def parse
+    normalize()
     definitions_pass()
-    mangle_and_merge
-    assemble()
+    mangle_and_merge()
+    do_main_pass()
 #    @program_symbols.each_pair do |k, sym|
 #      puts "#{k} -> #{sym.def_instr.to_s}"
 #    end
@@ -647,10 +666,8 @@ if __FILE__ == $PROGRAM_NAME
   open(filename, 'r') do |file|
     om = ObjectModule.new(filename, file.readlines)
   end
-
+  
   unless om.nil?
-    om.normalize
-#    puts om.lines
     om.parse
     om.print_listing
   end

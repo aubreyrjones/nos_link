@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 require 'rubygems'
 require 'trollop'
 
@@ -5,9 +7,36 @@ $config = Trollop::options do
   banner <<-EOS
 USAGE: nos_link -o output_binary assembly_module [space separated list of additional modules]
 EOS
-  opt :output_binary, "Name of the output x10b-format binary.", :type => :string
+  opt :output_binary, "Name of the output x10b-format binary.", :type => :string, :default => "out.x10b"
+  opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
 
 
+#============LINKER=============
+require File.expand_path(File.dirname(__FILE__) + '/linker/parser.rb')
+require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
+
+instruction_stream = []
+symbol_table = {}
+
+ARGV.each do |filename|
+  open(filename, 'r') do |file|
+    this_module = ObjectModule.new(filename, file.readlines)
+    this_module.program_symbols = symbol_table #will now define into global space
+    
+    this_module.parse
+    instruction_stream.concat(this_module.instructions)
+  end
+end
+
+if $config[:listing]
+  puts instruction_stream.join("\n")
+  exit
+end
+
+assembler = Assemblinker.new(symbol_table, instruction_stream)
+
+assembler.fix
+assembler.assemble

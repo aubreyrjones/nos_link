@@ -1,4 +1,6 @@
-class InvalidOp
+require 'rubygems'
+
+class InvalidOp < Exception
   attr_accessor :msg, :op
   def initialize(message, op)
     @msg = message
@@ -6,7 +8,7 @@ class InvalidOp
   end
 end
 
-class ParamError
+class ParamError < Exception
   attr_accessor :msg, :param
   def initialize(message, param)
     @msg = message
@@ -35,16 +37,15 @@ declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc O")
 
 HEX_RE = /0x([0-9a-f]+)/i
-INT_RE = /(\d+)/
+DEC_RE = /(\d+)/
+
+LITERAL_RE = /HEX_RE|DEC_RE/
 
 #definition of a legal label or source symbol
 LABEL_RE = /[a-z0-9\._]+/i
 
 #Label definition
-LABEL_DEF_RE = /^\s*:(#{LABEL_RE})/i
-
-# :label instruction operand, operand
-LINE_RE = /#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)\s*,\s*(.+)$/i
+LABEL_DEF_RE = /^\s*:(#{LABEL_RE})\s*/i
 
 # hidden global variables
 HIDDEN_SYM_RE = /\.(hidden|private)\s+(#{LABEL_RE})/i
@@ -55,20 +56,31 @@ DATA_WORD_RE = /\.(word|uint16_t)\s+(\w+)/
 #an extended instruction (taking only one parameter)
 EXT_INSTR_RE = /^#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)$/i
 
-
+#any instruction
 INSTR_RE = /#{INSTRUCTIONS.keys.join('|')}/i
 
-REGISTER_RE = /[#{REGISTERS.keys.join('')}]/i
-VALUE_RE = /#{VALUES.keys.join('|')}/
+# :label instruction operand, operand
+LINE_RE = /#{LABEL_DEF_RE}?\s*(#{INSTR_RE})\s+(.+)\s*,\s*(.+)$/i
 
+#registers
+REGISTER_RE = /[#{REGISTERS.keys.join('')}]/i
+
+#special parameters
+VALUE_RE = /^(#{VALUES.keys.join('|')})$/i
+
+#indirect?
 INDIRECT_RE = /\[(.*)\]/i
 
-INDIRECT_REGISTER = 0x08
-INDIRECT_REG_NEXT = 0x10
+#parameter expressions
+LABEL_CAP_RE = /(#{LABEL_RE})/
+REG_CAP_RE = /(#{REGISTER_RE})/
 
-NEXT_INDIRECT = 0x1e
-NEXT_LITERAL = 0x1f
+INDIRECT_REG_OFFSET = 0x08
+INDIRECT_REG_NEXT_OFFSET = 0x10
 
+INDIRECT_NEXT = 0x1e
+LITERAL_NEXT = 0x1f
+SHORT_LITERAL_OFFSET = 0x20
 
 $DONT_STOP_ON_ERROR = false
 
@@ -81,53 +93,179 @@ def parse_error_stop(reason, source_file, line_number, line)
   exit 1 unless $DONT_STOP_ON_ERROR
 end
 
+class Param
+  attr_accessor :offset, :reference_token, :reference_address, :register, :indirect
+
+  def initialize(param_expression)
+    @token = param_expression
+    @offset = 0
+    @reference_token = nil
+    @reference_address = nil
+    @register = nil
+    @indirect = false
+    @value = nil
+
+    parse_expression(param_expression)
+  end
+
+  def needs_word?
+    if !@value.nil?
+      return false
+    end
+    return @offset > 0x1f || @reference_token
+  end
+
+  def param_word
+    puts "Bullshit param word."
+    return 0xffff
+  end
+
+  def mode_bits
+    puts @token
+    if @value
+      return @value
+    end
+
+    #     register cases:
+    #    0x00-0x07: register (A, B, C, X, Y, Z, I or J, in that order)
+    #    0x08-0x0f: [register]
+    #    0x10-0x17: [next word + register]
+    if @register
+      if !@indirect
+        return @register #only literal register value
+      end
+
+      if @offset > 0 || @reference_token #resove a label, or use a large offset
+        return @register + INDIRECT_REG_NEXT_OFFSET 
+      else
+        return @register + INDIRECT_REG_OFFSET
+      end
+    end
+
+    #     reference cases, with no register
+    #    0x1e: [next word]
+    #    0x1f: next word (literal)
+    if @reference_token #we have a reference, so we'll push a word regardless
+      if @indirect
+        return INDIRECT_NEXT
+      else
+        return LITERAL_NEXT
+      end
+    end
+
+    if @offset > 0
+      if @offset <= 0x1f && !@indirect
+        return @offset + SHORT_LITERAL_OFFSET
+      end
+      
+      if @indirect
+        return INDIRECT_NEXT
+      else
+        return LITERAL_NEXT
+      end
+    end
+
+#    puts "NOPE "
+#    puts @value
+#    puts @register
+#    puts @reference_token
+#    puts @offset
+#    exit 21
+  end
+
+  def set_offset(token)
+    if token =~ HEX_RE
+      @offset = $1.to_i(16)
+    else
+      @offset = $1.to_i(10)
+    end
+  end
+
+  def set_register(token)
+    @register = REGISTERS[token]
+    if @register.nil?
+      raise ParamError("Unknown register.", token)
+    end
+  end
+
+  def set_reference_label(token)
+    @reference_token = token
+  end
+
+  def parse_expression(expr)
+    if expr =~ INDIRECT_RE
+      expr = $1
+      @indirect = true
+    end
+
+    expr.gsub!(/\s+/, '') #remove spaces
+    if expr =~ VALUE_RE
+      @value = VALUES[$1]
+      return
+    end
+
+    tokens = expr.split("+")
+    if tokens.nil? || tokens.size == 0
+      raise ParamError.new("No parameter given.", expr)
+    end
+
+    tokens.each do |tok|
+      if tok =~ LITERAL_RE
+        set_offset(tok)
+      elsif tok =~ LABEL_CAP_RE
+        set_reference_label(tok)
+      elsif tok =~ REG_CAP_RE
+        set_register_token($1)
+      else
+        raise ParamError.new("Bad token.", expr)
+      end
+    end
+  end
+    
+end
+
 class Instruction
-  attr_accessor :opcode, :a, :b, :next_words, :source, :line, :defined_symbols
+  attr_accessor :opcode, :a, :b, :source, :line, :defined_symbols
   
-  def initialize(module_name, global_scope, opcode_token, param_a, param_b, defined_symbols, source_file, line_number)
+  def initialize(source_file, global_scope, labels, opcode_token, param_a, param_b, line_number)
     @opcode_token = opcode_token
+    @scope = global_scope
     @param_a = param_a
     @param_b = param_b
     @source = source_file
     @line = line_number
-    @defined_symbols = defined_symbols
+    @defined_symbols = labels
+    @module = AsmSymbol::make_module_name(source_file)
 
     @op = INSTRUCTIONS[@opcode_token]
+    @size = 1
 
     if @op.nil? 
       @op = EXTENDED_INSTRUCTIONS[@opcode_token]
       if @op.nil?
-        puts "Unknown instruction."
+        puts "Unknown instruction: #{@opcode_token}"
         exit 1
       end
       @extended = true
     end
 
-    @a = parse_param(@param_a)
-    @b = parse_param(@param_b) unless @extended
-
-    @next_words = []
-  end
-
-  def parse_param(param_token)
-    indirect = param_token =~ INDIRECT_RE
-    if indirect
-      param_token = $1.strip
+    @a = Param.new(@param_a)
+    if @a.needs_word?
+      @size += 1
     end
     
-    if param_token =~ REGISTER_RE #it's a register
-      reg_code = REGISTERS[$1]
-      return REGISTERS[$1] + (indirect ? INDIRECT_REGISTER : 0)
-    elsif param_token =~ VALUE_RE #it's one of the special magic values
-      if indirect
-        raise ParamError.new("#{param_token} cannot be used for indirection.", param_token)
-      end
-      return VALUES[param_token]
+    @b = Param.new(@param_b)
+    if @b.needs_word?
+      @size += 1
     end
+  end
 
-    puts "Don't know how to handle: #{param_token}"
+  def size
+    @size
+  end
 
-    return -1
+  def opcode
+    @op | (@a.mode_bits << 4) | (@b.mode_bits << 10)
   end
 
   def orig
@@ -179,6 +317,10 @@ class AsmSymbol
 
   def make_hidden
     @linkage_vis = :hidden
+  end
+
+  def local?
+    return @linkage_vis == :local
   end
 
   def attach_local(local_sym)
@@ -238,7 +380,7 @@ class ObjectModule
 
   #Resolve a symbol in the current tables.
   def resolve(filename, symbol_name, current_global = nil)
-    if label.start_with?('.') #local label
+    if symbol_name.start_with?('.') #local label
       if current_global.nil?
         puts "Cannot locate local symbol without global context."
         exit 1
@@ -265,7 +407,7 @@ class ObjectModule
     last_global_symbol = nil
     @lines.each_with_index do |line, line_number|
       next if empty_line(line)
-      if line =~ LABEL_DEF_RE || line =~ LINE_RE
+      if line =~ LABEL_DEF_RE
         if empty_line($1)
           next
         end
@@ -332,18 +474,28 @@ class ObjectModule
   end
 
   def assemble
-
     pending_symbols = []
     last_global_symbol = nil #might also be hidden
 
     @lines.each_with_index do |line, line_number|
 
-      if line.empty? || line =~ /^\s+$/ #skip empty lines or whitespace lines
+      if empty_line(line)
+        next
+      end
+
+      if line =~ HIDDEN_SYM_RE
         next
       end
 
       if line =~ LABEL_DEF_RE #this is a standalone symbol definition
-        
+        label_def = $1.strip
+        resolved_symbol = resolve(@filename, label_def, last_global_symbol)
+        if resolved_symbol.nil?
+          puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
+          exit 1
+        end
+        last_global_symbol = resolved_symbol unless resolved_symbol.local?
+        next
       end
 
       unless line =~ LINE_RE || line =~ EXT_INSTR_RE
@@ -354,15 +506,25 @@ class ObjectModule
       instruction = $2.downcase
       param_a = $3
       param_b = $4
-      
-      unless label.nil? || label.empty?
-        last_global_label, label = globalize_label(last_global_label, label, line_number, line)
-        pending_labels << label
+
+      if instruction =~ /test/
+        require 'ruby-debug/debugger'
       end
+      
+      unless empty_line(label)
+        label_def = $1.strip
+        resolved_symbol = resolve(@filename, label_def, last_global_symbol)
+        if resolved_symbol.nil?
+          puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
+          exit 1
+        end
+        last_global_symbol = resolved_symbol unless resolved_symbol.local?
+      end
+
       begin
-        instr = Instruction.new(instruction, param_a, param_b, pending_labels, @filename, line_number)
+        instr = Instruction.new(@filename, last_global_symbol, pending_symbols, instruction, param_a, param_b, line_number)
         pending_labels = []
-        puts instr.orig
+        puts instr.opcode.to_s(16)
       rescue ParamError => e
         parse_error_stop(e.msg, @filename, line_number, line)
       end
@@ -373,6 +535,7 @@ class ObjectModule
   def parse
     definitions_pass()
     mangle_and_merge
+    assemble()
     puts "Symbol table:"
     @program_symbols.each_key do |k|
       puts k

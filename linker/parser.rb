@@ -49,7 +49,7 @@ end
 
 SECTIONS = "\\.data \\.text".split(" ")
 DIRECTIVES = "\\.private \\.hidden".split(" ")
-NULL_DIR = "\\.align \\.globl \\.global \\.local \\.extern".split(" ")
+NULL_DIR = "\\.file \\.align \\.globl \\.global \\.local \\.extern".split(" ")
 
 HEX_RE = /^0x([0-9a-f]+)$/i
 DEC_RE = /^(\d+)$/
@@ -174,7 +174,11 @@ class Param
       if @reference_address.nil?
         raise ParamError.new("Undefined reference to: #{@reference_token}", @token)
       end
-      return @reference_address + (@offset | 0)
+      off = 0
+      if @offset
+        off += @offset
+      end
+      return @reference_address + off
     end
 
     return @offset
@@ -194,7 +198,7 @@ class Param
         return @register #only literal register value
       end
       
-      if (@offset && @offset) > 0 || @reference_token #resove a label, or use a large offset
+      if (@offset && @offset > 0) || @reference_token #resove a label, or use a large offset
         return @register + INDIRECT_REG_NEXT_OFFSET 
       else
         return @register + INDIRECT_REG_OFFSET
@@ -212,7 +216,7 @@ class Param
       end
     end
 
-    if @offset && @offset > 0
+    if @offset
       if @offset <= 0x1f && !@indirect
         return @offset + SHORT_LITERAL_OFFSET
       end
@@ -223,6 +227,9 @@ class Param
         return LITERAL_NEXT
       end
     end
+
+    puts @token
+    exit
   end
   
   def set_offset(token)
@@ -290,11 +297,12 @@ class Instruction
     @line = line_number
     @defined_symbols = labels
     @module = AsmSymbol::make_module_name(source_file)
+    @extended = false
     
     @op = INSTRUCTIONS[@opcode_token]
     @size = 1
 
-    if @op.nil? 
+    if @op.nil?
       @op = EXTENDED_INSTRUCTIONS[@opcode_token]
       if @op.nil?
         puts "Unknown instruction: #{@opcode_token}"
@@ -320,8 +328,8 @@ class Instruction
     @address = address
   end
 
-  def realize(symbol_table)
-    @bytes = [@op]
+  def realize
+    @bytes = [opcode]
     if @a.needs_word?
       @bytes << @a.param_word
     end
@@ -340,13 +348,16 @@ class Instruction
   end
 
   def opcode
-    @op | (@a.mode_bits << 4) | (@b.mode_bits << 10)
+    if @extended
+      return 0x00 | (@op << 4) | (@a.mode_bits << 10)
+    end
+    return @op | (@a.mode_bits << 4) | (@b.mode_bits << 10)
   end
 
   def to_s
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
-    addr_line = @address ? "\t; 0x" + address.to_s(16) : ''
+    addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
     return "#{labels}\t#{@opcode_token} #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
   end
 
@@ -586,7 +597,7 @@ class ObjectModule
         next
       end
 
-      if line =~ /^\s*#{NULL_DIR_RE}\s*/
+      if line =~ /^\s*(#{NULL_DIR_RE})/
         #null ops that we ignore
         next
       end

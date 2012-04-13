@@ -10,6 +10,7 @@ EOS
   opt :output_binary, "Name of the output x10b-format binary.", :type => :string, :default => "out.x10b"
   opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
   opt :pre_bin, "Print a pseudo-listing. This is essentially a text representation of the binary image.", :type => :boolean
+  opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
@@ -46,3 +47,14 @@ if $config[:pre_bin]
   puts instruction_stream.join("\n")
   exit
 end
+
+assembler.realize
+
+unless $config[:bin_listing]
+  open($config[:output_binary], 'w') do |outfile|
+    assembler.binary(outfile)
+  end
+else
+  assembler.print_hex_and_instr
+end
+

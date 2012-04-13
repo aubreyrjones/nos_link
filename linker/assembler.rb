@@ -9,7 +9,6 @@ class Assemblinker
   def initialize(symbols, instructions)
     @symbols = symbols
     @instructions = instructions
-    @binary = ''
   end
 
   def fix
@@ -21,10 +20,36 @@ class Assemblinker
   end
 
   def assemble
-    @binary = ''
     @instructions.each do |instr|
       resolve_param(instr, instr.a)
       resolve_param(instr, instr.b)
+    end
+  end
+
+  def realize
+    @instructions.each do |instr|
+      instr.realize
+    end
+  end
+
+  def binary(output)
+    if @instructions.size == 0
+      puts "No instruction stream. Cannot create binary."
+      error 1
+    end
+
+    @instructions.each do |instr|
+      instr_bytes = instr.bytes
+      encstr = 'v' * instr_bytes.size
+      output << instr_bytes.pack(encstr)
+    end
+  end
+
+  def print_hex_and_instr
+    @instructions.each do |instr|
+      instr_bytes = instr.bytes
+      fstr = "%x " * instr_bytes.size
+      puts "#{instr.to_s} \t #{fstr % instr_bytes}"
     end
   end
 

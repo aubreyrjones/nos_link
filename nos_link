@@ -11,6 +11,7 @@ EOS
   opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
   opt :pre_bin, "Print a pseudo-listing. This is essentially a text representation of the binary image.", :type => :boolean
   opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
+#  opt :input_files, "A list of files to assemble. Used after files on the command-line.", :type => :string
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
@@ -23,7 +24,16 @@ require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
 instruction_stream = []
 symbol_table = {}
 
-ARGV.each do |filename|
+input_files = []
+input_files.concat(ARGV)
+
+if $config[:input_files]
+  open($config[:input_files], 'r') do |file|
+    listed_ins = file.readlines
+  end
+end
+
+input_files.each do |filename|
   open(filename, 'r') do |file|
     this_module = ObjectModule.new(filename, file.readlines)
     this_module.program_symbols = symbol_table #will now define into global space

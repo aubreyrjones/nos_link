@@ -36,6 +36,20 @@ declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc O")
 
+REV_REG = {}
+REGISTERS.each_pair do |k, v|
+  REV_REG[v] = k
+end
+
+REV_VALS = {}
+VALUES.each_pair do |k, v|
+  REV_VALS[v] = k
+end
+
+SECTIONS = "\\.data \\.text".split(" ")
+DIRECTIVES = "\\.private \\.hidden".split(" ")
+NULL_DIR = "\\.align \\.globl \\.global \\.local \\.extern".split(" ")
+
 HEX_RE = /0x([0-9a-f]+)/i
 DEC_RE = /(\d+)/
 
@@ -55,6 +69,12 @@ DATA_WORD_RE = /\.(word|uint16_t)\s+(\w+)/
 
 #an extended instruction (taking only one parameter)
 EXT_INSTR_RE = /^#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)$/i
+
+SECTION_RE = /#{SECTIONS.join('|')}/
+
+DIRECTIVE_RE = /#{DIRECTIVES.join('|')}/
+
+NULL_DIR_RE = /#{NULL_DIR.join('|')}/
 
 #any instruction
 INSTR_RE = /#{INSTRUCTIONS.keys.join('|')}/i
@@ -108,6 +128,25 @@ class Param
     parse_expression(param_expression)
   end
 
+  def to_s
+    if @value
+      return REV_VALS[@value]
+    end
+
+    buf = []
+
+    if @offset > 0
+      buf << "0x#{@offset.to_s(16)}"
+    end
+    if @reference_token
+      buf << reference_token
+    end
+    if @register
+      buf << REV_REG[@register]
+    end
+    return buf.join("+")
+  end
+
   def needs_word?
     if !@value.nil?
       return false
@@ -121,7 +160,6 @@ class Param
   end
 
   def mode_bits
-    puts @token
     if @value
       return @value
     end
@@ -200,7 +238,8 @@ class Param
 
     expr.gsub!(/\s+/, '') #remove spaces
     if expr =~ VALUE_RE
-      @value = VALUES[$1]
+      @value = VALUES[$1.downcase]
+      puts @value
       return
     end
 
@@ -266,6 +305,11 @@ class Instruction
 
   def opcode
     @op | (@a.mode_bits << 4) | (@b.mode_bits << 10)
+  end
+
+  def to_s
+    labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
+    "#{labels}\n\t#{@opcode_token} #{@a.to_s}, #{@b.to_s}"
   end
 
   def orig
@@ -382,7 +426,7 @@ class ObjectModule
   def resolve(filename, symbol_name, current_global = nil)
     if symbol_name.start_with?('.') #local label
       if current_global.nil?
-        puts "Cannot locate local symbol without global context."
+        puts "Cannot locate local symbol without global context. #{filename}, #{symbol_name}"
         exit 1
       end
       resolve_name = AsmSymbol::make_local_name(current_global, symbol_name)
@@ -473,9 +517,30 @@ class ObjectModule
     end
   end
 
+  def parse_label_pending(label_def, last_global_symbol, pending_symbols)
+
+    retval = []
+    new_local = false
+    if label_def.start_with?('.')
+      new_local = true
+      resolved_symbol = resolve(@filename, label_def, last_global_symbol)
+    else
+      new_local = false
+      resolved_symbol = resolve(@filename, label_def, nil)
+    end
+    if resolved_symbol.nil?
+      puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
+      exit 1
+    end
+
+    pending_symbols << resolved_symbol
+    resolved_symbol.local? ? last_global_symbol : resolved_symbol
+  end
+
   def assemble
     pending_symbols = []
     last_global_symbol = nil #might also be hidden
+    current_section = :text
 
     @lines.each_with_index do |line, line_number|
 
@@ -483,18 +548,36 @@ class ObjectModule
         next
       end
 
-      if line =~ HIDDEN_SYM_RE
+      if line =~ HIDDEN_SYM_RE 
+        #already used by the definitions phase
         next
       end
 
-      if line =~ LABEL_DEF_RE #this is a standalone symbol definition
-        label_def = $1.strip
-        resolved_symbol = resolve(@filename, label_def, last_global_symbol)
-        if resolved_symbol.nil?
-          puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
-          exit 1
+      if line =~ /^\s*(#{SECTION_RE})\s*$/
+        case $1
+        when '.text'
+          current_section = :text
+        when '.data'
+          current_section = :data
         end
-        last_global_symbol = resolved_symbol unless resolved_symbol.local?
+
+        next
+      end
+
+      if line =~ /^\s*(#{DIRECTIVE_RE})/
+        #only visibility at the moment, skip
+        next
+      end
+
+      if line =~ /^\s*#{NULL_DIR_RE}\s*/
+        #null ops that we ignore
+        next
+      end
+
+      if line =~ /^\s*#{LABEL_DEF_RE}\s*$/
+        #this is a standalone symbol definition, save it to define it later.
+        label_def = $1.strip
+        last_global_symbol = parse_label_pending(label_def, last_global_symbol, pending_symbols)
         next
       end
 
@@ -506,28 +589,24 @@ class ObjectModule
       instruction = $2.downcase
       param_a = $3
       param_b = $4
-
-      if instruction =~ /test/
-        require 'ruby-debug/debugger'
-      end
       
       unless empty_line(label)
         label_def = $1.strip
-        resolved_symbol = resolve(@filename, label_def, last_global_symbol)
-        if resolved_symbol.nil?
-          puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
-          exit 1
-        end
-        last_global_symbol = resolved_symbol unless resolved_symbol.local?
+        last_global_symbol = parse_label_pending(label_def, last_global_symbol, pending_symbols)
       end
 
+      instr = nil
       begin
         instr = Instruction.new(@filename, last_global_symbol, pending_symbols, instruction, param_a, param_b, line_number)
-        pending_labels = []
-        puts instr.opcode.to_s(16)
       rescue ParamError => e
         parse_error_stop(e.msg, @filename, line_number, line)
       end
+
+      pending_symbols.each do |sym|
+        sym.define(instr)
+      end
+      pending_symbols = []
+      @instructions << instr
     end
   end
 
@@ -536,10 +615,15 @@ class ObjectModule
     definitions_pass()
     mangle_and_merge
     assemble()
-    puts "Symbol table:"
-    @program_symbols.each_key do |k|
-      puts k
-    end
+#    @program_symbols.each_pair do |k, sym|
+#      puts "#{k} -> #{sym.def_instr.to_s}"
+#    end
+    
+  end
+
+  def print_listing
+    outlines = @instructions.map {|ins| ins.to_s}
+    puts outlines.join("\n")
   end
 
   def globalize_label(last_global_label, this_label, line_number, line)
@@ -568,5 +652,6 @@ if __FILE__ == $PROGRAM_NAME
     om.normalize
 #    puts om.lines
     om.parse
+    om.print_listing
   end
 end

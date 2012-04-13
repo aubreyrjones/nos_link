@@ -38,5 +38,7 @@ class Assemblinker
       puts "Unfulfilled link error. Trying to find: #{param.reference_token}"
       exit 1
     end
+
+    param.resolve(ref_sym.def_instr.address)
   end
 end

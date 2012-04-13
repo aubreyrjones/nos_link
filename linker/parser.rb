@@ -51,8 +51,8 @@ SECTIONS = "\\.data \\.text".split(" ")
 DIRECTIVES = "\\.private \\.hidden".split(" ")
 NULL_DIR = "\\.align \\.globl \\.global \\.local \\.extern".split(" ")
 
-HEX_RE = /0x([0-9a-f]+)/i
-DEC_RE = /(\d+)/
+HEX_RE = /^0x([0-9a-f]+)$/i
+DEC_RE = /^(\d+)$/
 
 #definition of a legal label or source symbol
 LABEL_RE = /[\._a-z]+[a-z0-9\._]+/i
@@ -117,7 +117,7 @@ class Param
 
   def initialize(param_expression)
     @token = param_expression
-    @offset = 0
+    @offset = nil
     @reference_token = nil
     @reference_address = nil
     @register = nil
@@ -134,12 +134,16 @@ class Param
 
     buf = []
 
-    if @offset > 0
+    if @offset 
       buf << "0x#{@offset.to_s(16)}"
     end
 
     if @reference_token
-      buf << reference_token
+      if @reference_address
+        buf << "0x#{@reference_address}"
+      else
+        buf << reference_token
+      end
     end
 
     if @register
@@ -158,7 +162,7 @@ class Param
     if !@value.nil?
       return false
     end
-    return @offset > 0x1f || @reference_token
+    return @offset || @reference_token
   end
 
   def resolve(ref_address)
@@ -170,10 +174,9 @@ class Param
       if @reference_address.nil?
         raise ParamError.new("Undefined reference to: #{@reference_token}", @token)
       end
-      
-      return @offset + @reference_address
+      return @reference_address + (@offset | 0)
     end
-    
+
     return @offset
   end
   
@@ -191,7 +194,7 @@ class Param
         return @register #only literal register value
       end
       
-      if @offset > 0 || @reference_token #resove a label, or use a large offset
+      if (@offset && @offset) > 0 || @reference_token #resove a label, or use a large offset
         return @register + INDIRECT_REG_NEXT_OFFSET 
       else
         return @register + INDIRECT_REG_OFFSET
@@ -209,7 +212,7 @@ class Param
       end
     end
 
-    if @offset > 0
+    if @offset && @offset > 0
       if @offset <= 0x1f && !@indirect
         return @offset + SHORT_LITERAL_OFFSET
       end
@@ -250,7 +253,6 @@ class Param
     expr.gsub!(/\s+/, '') #remove spaces
     if expr =~ VALUE_RE
       @value = VALUES[$1.downcase]
-      puts @value
       return
     end
 
@@ -344,7 +346,7 @@ class Instruction
   def to_s
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
-    addr_line = @address ? "\t; " + address.to_s : ''
+    addr_line = @address ? "\t; 0x" + address.to_s(16) : ''
     return "#{labels}\t#{@opcode_token} #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
   end
 

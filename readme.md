@@ -5,11 +5,13 @@ This is a assembling linker, or linking assembler, for the 0x10c DCPU-16 v1.1.
 
 It accepts Notch-style assembly code. You may specify as many assembly files as you wish, and they will be linked as assembled.
 
+
 Prerequisites
 -------------
 You'll need ruby. I'm using 1.8; but, it should work with 1.9 as well.
 
 You'll also need the 'trollop' rubygem. I use it for command-line arguments processing. This is the only ruby dependency.
+
 
 Usage
 -----
@@ -17,3 +19,40 @@ Usage
     nos_link -o output_binary assembly_module [space separated list of additional modules]
 
 Try --help for more options.
+
+
+Assembler Syntax and Directives
+------------------------------
+
+nos_link accepts standard Notch-style assembly. This differs from traditional assembly in location of colon in label definition.
+
+Labels may be any collection of letters, numbers, periods, and underscores. They must not start with a digit.
+
+Labels named identically to register names (a, x, i, j...) or operand value names (push, pop, pc, sp...) will be masked by the the register they shadow. This means that if you have a label defined with ':a', it cannot be referenced by any instruction parameter--the expression will be interpreted as the 'a' register instead.
+
+Any label starting with a '.' will be treated as local. They are bound to the most immediately preceeding global label. Local labels may only be referenced by instructions in the same global label scope.
+
+    :expon
+      set a, 0x42
+      set b, 0x42
+    :.local_label
+      mul a, b
+      set pc, .local_label
+    
+Currently the only actively supported assembler directive is '.hidden' (which may also be spelled '.private'). The .hidden directive indicates to the linker that the given label is not available for reference from the rest of te program. Additionally, it indicates that the .hidden symbol should be preferred to global symbols of the same name for references from within the same assembly module.
+
+The syntax is:
+
+    .hidden symbol_name
+
+Example: 
+
+      .hidden expon
+    :expon
+      set a, 0x42
+      set b, 0x42
+    :.local_label
+      mul a, b
+      set pc, .local_label
+
+Data word support will also be added shortly.

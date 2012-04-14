@@ -172,7 +172,7 @@ class Param
     if !@value.nil?
       return false
     end
-    return @offset || @reference_token
+    return (@offset && @offset > 0x1f) || @reference_token
   end
 
   # Set the reference address for the parameter
@@ -193,7 +193,9 @@ class Param
       return @reference_address + off
     end
 
-    return @offset
+    if @offset && needs_word?
+      return @offset
+    end
   end
   
   # Get the addressing mode bits. These are the 'a' or 'b' in the dcpu16 instruction.

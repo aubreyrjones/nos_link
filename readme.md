@@ -66,6 +66,7 @@ Example:
 Data can be inlined into assembly modules either as individual words, or as text strings.
 
 Example:
+
     :single_word_example
       .word 0x10 ; encode the literal value 16
       .uint16_t 0x10 ; .uint16_t is an alias for .word

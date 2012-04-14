@@ -12,6 +12,14 @@ You'll need ruby. I'm using 1.8; but, it should work with 1.9 as well.
 
 You'll also need the 'trollop' rubygem. I use it for command-line arguments processing. This is the only ruby dependency.
 
+If you're running apt-based linux, here is the basic recipe to get up to speed. This may not be the ideal way to install this stuff, but it's the easiest. rpm- or source-based distros will use basically the same approach.
+
+    > sudo apt-get install ruby rubygems
+    > sudo gem install trollop
+
+On windows, I'm not entirely sure what to do. But, you need to install ruby from <www.ruby-lang.org> and rubygems from <rubygems.org>. Then you tell rubygems to install 'trollop', and you should be good to go.
+
+On osx... I have no idea.
 
 Usage
 -----

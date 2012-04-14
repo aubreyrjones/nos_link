@@ -18,8 +18,10 @@ Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
 
 
 #============LINKER=============
-require File.expand_path(File.dirname(__FILE__) + '/linker/parser.rb')
-require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
+require File.expand_path('../linker/parser.rb', __FILE__)
+require File.expand_path('../linker/assembler.rb', __FILE__)
+#require File.expand_path(File.dirname(__FILE__) + '/linker/parser.rb')
+#require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
 
 instruction_stream = []
 symbol_table = {}
@@ -31,6 +33,11 @@ if $config[:input_files]
   open($config[:input_files], 'r') do |file|
     listed_ins = file.readlines
   end
+end
+
+if input_files.size == 0
+  puts "No input files."
+  exit 1
 end
 
 input_files.each do |filename|

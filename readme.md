@@ -17,7 +17,7 @@ If you're running apt-based linux, here is the basic recipe to get up to speed. 
     > sudo apt-get install ruby rubygems
     > sudo gem install trollop
 
-On windows, I'm not entirely sure what to do. But, you need to install ruby from <www.ruby-lang.org> and rubygems from <rubygems.org>. Then you tell rubygems to install 'trollop', and you should be good to go.
+On windows, I'm not entirely sure what to do. But, you need to install ruby from http://www.ruby-lang.org and rubygems from http://rubygems.org. Then you tell rubygems to install 'trollop', and you should be good to go.
 
 On osx... I have no idea.
 

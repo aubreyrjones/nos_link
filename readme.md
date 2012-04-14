@@ -55,4 +55,13 @@ Example:
       mul a, b
       set pc, .local_label
 
-Data word support will also be added shortly.
+Data can be inlined into assembly modules either as individual words, or as text strings.
+
+Example:
+    :single_word_example
+      .word 0x10 ; encode the literal value 16
+      .uint16_t 0x10 ; .uint16_t is an alias for .word
+    :string_example
+      .string "This is a string."
+
+(There is currently no support for the comma-separated numeric literals style.)

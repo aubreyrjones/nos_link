@@ -55,7 +55,7 @@ SECTIONS = "\\.data \\.text".split(" ")
 DIRECTIVES = "\\.private \\.hidden".split(" ")
 
 # Null directives (skipped)
-NULL_DIR = "\\.file \\.align \\.globl \\.global \\.local \\.extern".split(" ")
+NULL_DIR = "\\.section \\.file \\.align \\.globl \\.global \\.local \\.extern".split(" ")
 
 HEX_RE = /^0x([0-9a-f]+)$/i
 DEC_RE = /^(\d+)$/
@@ -87,7 +87,7 @@ INSTR_RE = /#{INSTRUCTIONS.keys.join('|')}/i
 ONE_PARAM_OPS = [].concat(EXTENDED_INSTRUCTIONS.keys)
 ONE_PARAM_OPS << '.word' << '.uint16_t'
 
-STRING_LINE = /#{LABEL_DEF_RE}?\s*(\.string)\s+(".*")$/i
+STRING_LINE = /#{LABEL_DEF_RE}?\s*(\.string|\.asciz)\s+(".*")$/i
 
 ONE_PARAM_LINE = /#{LABEL_DEF_RE}?\s*(#{ONE_PARAM_OPS.join('|')})\s+([^,]+)\s*$/i
 
@@ -156,7 +156,7 @@ class Param
 
     if @reference_token
       if @reference_address
-        buf << "0x#{@reference_address}"
+        buf << "0x#{@reference_address.to_s(16)}"
       else
         buf << reference_token
       end
@@ -177,10 +177,21 @@ class Param
 
   # Does this parameter demand an additional word in the instruction?
   def needs_word?
-    if !@value.nil?
+    if @value
       return false
     end
-    return (@offset && @offset > 0x1f) || @reference_token
+
+    if @reference_token
+      return true
+    end
+        
+    if @register && @offset
+      return true
+    end
+    
+    if @offset && @offset > 0x1f
+      return true
+    end
   end
 
   # Set the reference address for the parameter
@@ -724,7 +735,7 @@ class ObjectModule
 
       instr = nil
 
-      if instruction =~ DATA_WORD_RE || instruction.strip == '.string'
+      if instruction =~ DATA_WORD_RE || instruction.strip =~ /\.string|\.asciz/i
         begin
           instr = InlineData.new(@filename, last_global_symbol, pending_symbols, param_a, line_number)
         rescue ParamError => e

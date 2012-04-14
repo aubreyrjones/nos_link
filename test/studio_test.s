@@ -1,4 +1,7 @@
-; Try some basic stuff
+	;; Lifted from the dcpu16 studio default
+
+				; Try some basic stuff
+:main
         SET A, 0x30
         SET [0x1000], 0x20
         SUB A, [0x1000]

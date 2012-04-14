@@ -3,6 +3,8 @@
 require 'rubygems'
 require 'trollop'
 
+KNOWN_LOADERS = ['naive', 'none']
+
 $config = Trollop::options do
   banner <<-EOS
 USAGE: nos_link -o output_binary assembly_module [space separated list of additional modules]
@@ -11,7 +13,8 @@ EOS
   opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
   opt :pre_bin, "Print a pseudo-listing. This is essentially a text representation of the binary image.", :type => :boolean
   opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
-#  opt :input_files, "A list of files to assemble. Used after files on the command-line.", :type => :string
+  opt :loader, "Choose which loader stub to use. Choose from: #{KNOWN_LOADERS.join(',')}", :type => :string, :default => KNOWN_LOADERS[0]
+  opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
@@ -31,7 +34,7 @@ input_files.concat(ARGV)
 
 if $config[:input_files]
   open($config[:input_files], 'r') do |file|
-    listed_ins = file.readlines
+    input_files.concat(file.readlines)
   end
 end
 
@@ -39,6 +42,8 @@ if input_files.size == 0
   puts "No input files."
   exit 1
 end
+
+input_files.unshift(File.expand_path("../loaders/#{$config[:loader]}.s", __FILE__))
 
 input_files.each do |filename|
   open(filename, 'r') do |file|

@@ -70,10 +70,10 @@ LABEL_DEF_RE = /^\s*:(#{LABEL_RE})\s*/i
 HIDDEN_SYM_RE = /\.(hidden|private)\s+(#{LABEL_RE})/i
 
 # an unsigned data word
-DATA_WORD_RE = /\.(word|uint16_t)\s+(\w+)/
+DATA_WORD_RE = /\.(word|uint16_t)/
 
 #an extended instruction (taking only one parameter)
-EXT_INSTR_RE = /^#{LABEL_DEF_RE}?\s*(\w+)\s+(.+)$/i
+EXT_INSTR_RE = /^#{LABEL_DEF_RE}?\s+(\w+)\s+(.+)$/i
 
 SECTION_RE = /#{SECTIONS.join('|')}/
 
@@ -84,8 +84,15 @@ NULL_DIR_RE = /#{NULL_DIR.join('|')}/
 #any instruction
 INSTR_RE = /#{INSTRUCTIONS.keys.join('|')}/i
 
+ONE_PARAM_OPS = [].concat(EXTENDED_INSTRUCTIONS.keys)
+ONE_PARAM_OPS << '.word' << '.uint16_t'
+
+STRING_LINE = /#{LABEL_DEF_RE}?\s*(\.string)\s+(".*")$/i
+
+ONE_PARAM_LINE = /#{LABEL_DEF_RE}?\s*(#{ONE_PARAM_OPS.join('|')})\s+([^,]+)\s*$/i
+
 # :label instruction operand, operand
-LINE_RE = /#{LABEL_DEF_RE}?\s*(#{INSTR_RE})\s+(.+)\s*,\s*(.+)$/i
+TWO_PARAM_LINE = /#{LABEL_DEF_RE}?\s*(#{INSTR_RE})\s+(.+)\s*,\s*(.+)$/i
 
 #registers
 REGISTER_RE = /[#{REGISTERS.keys.join('')}]/i
@@ -113,8 +120,9 @@ $DONT_STOP_ON_ERROR = false
 def parse_error_stop(reason, source_file, line_number, line)
   puts "FATAL LINK ERROR"
   puts "Error #{reason}"
-  puts "in file #{source_file} on line #{line_number}"
+  puts "in file #{source_file} on line #{line_number + 1}"
   puts "Errant Line: #{line}"
+  raise Exception.new
   exit 1 unless $DONT_STOP_ON_ERROR
 end
 
@@ -351,13 +359,13 @@ class Instruction
   # Build the binary representation of the entire instruction,
   # including any additional words.
   def realize
-    @bytes = [opcode]
+    @words = [opcode]
     if @a.needs_word?
-      @bytes << @a.param_word
+      @words << @a.param_word
     end
 
     if @b && @b.needs_word?
-      @bytes << @b.param_word
+      @words << @b.param_word
     end
   end
 
@@ -367,8 +375,8 @@ class Instruction
   end
 
   # Get the binary words for this instruction.
-  def bytes
-    @bytes
+  def words
+    @words
   end
 
   # Get the opcode for this instruction.
@@ -386,28 +394,66 @@ class Instruction
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
     return "#{labels}\t#{@opcode_token} #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
   end
-
 end
 
+# Inline data definition
 class InlineData
-  attr_accessor :data_words
-  def initialize(module_name)
-    @mod_name = module_name
-    @data_words = []
+  attr_reader :words
+  attr_reader :address
+  attr_accessor :source, :scope, :line, :defined_symbols
+
+  def initialize(source_file, global_scope, labels, value_token, line_number)
+    @value_token = value_token
+    @scope = global_scope
+    @source = source_file
+    @line = line_number
+    @defined_symbols = labels
+    @module = AsmSymbol::make_module_name(source_file)
+
+    @words = []
+
+    parse_data(@value_token)
   end
 
-  def <<(data)
-    @data_words << data
+  def parse_data(token)
+    if token.start_with?('"')
+      raise ParamError.new("No closing quotes on string.", token) unless token.end_with?('"')
+      
+      str = token[1..-2]
+      str.each_byte do |byte|
+        @words << byte #this is okay, just the values
+      end
+    elsif token =~ HEX_RE
+      @words << $1.to_i(16)
+    elsif token =~ DEC_RE
+      @words << $1.to_i(10)
+    end
   end
 
-  def length
-    @data_words.size
+  # Fix this instruction to a particular address in the program.
+  def fix(address)
+    @address = address
+  end
+
+  # Build the binary representation of the entire instruction,
+  # including any additional words.
+  def realize
+    #nop
+  end
+
+  def size
+    return @words.size
   end
 
   def to_s
-    @data_words.map{|word| ".word #{word.to_s}"}
+    labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
+    labels << "\n" unless labels.empty?
+    addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
+    words = @words.map{|w| "\t.word 0x#{w.to_s(16)}"}.join("\n")
+    return "#{labels}\t#{words}#{addr_line}"
   end
 end
+
 
 LINKAGE_VISIBILITY = [:global, :local, :hidden]
 #A symbol. It might or might not be defined.
@@ -619,6 +665,7 @@ class ObjectModule
     last_global_symbol = nil #might also be hidden
     current_section = :text
 
+
     @lines.each_with_index do |line, line_number|
       if empty_line(line)
         next
@@ -657,7 +704,8 @@ class ObjectModule
         next
       end
 
-      unless line =~ LINE_RE || line =~ EXT_INSTR_RE
+#      debugger
+      unless line =~ STRING_LINE || line =~ TWO_PARAM_LINE || line =~ ONE_PARAM_LINE
         parse_error_stop("Cannot parse line.", @filename, line_number, line)
       end
 
@@ -670,15 +718,25 @@ class ObjectModule
       param_b.strip if param_b
 
       unless empty_line(label)
-        label_def = $1.strip
+        label_def = label.strip
         last_global_symbol = parse_label_pending(label_def, last_global_symbol, pending_symbols)
       end
 
       instr = nil
-      begin
-        instr = Instruction.new(@filename, last_global_symbol, pending_symbols, instruction, param_a, param_b, line_number)
-      rescue ParamError => e
+
+      if instruction =~ DATA_WORD_RE || instruction.strip == '.string'
+        begin
+          instr = InlineData.new(@filename, last_global_symbol, pending_symbols, param_a, line_number)
+        rescue ParamError => e
+          parse_error_stop(e.msg, @filename, line_number, line)
+        end
+      else #try to parse as regular instruction
+        
+        begin
+          instr = Instruction.new(@filename, last_global_symbol, pending_symbols, instruction, param_a, param_b, line_number)
+        rescue ParamError => e
         parse_error_stop(e.msg, @filename, line_number, line)
+        end
       end
 
       pending_symbols.each do |sym|

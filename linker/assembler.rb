@@ -25,6 +25,7 @@ class Assemblinker
   # All that's left is turning the abstract instructions into binary.
   def assemble
     @instructions.each do |instr|
+      next unless instr.class == Instruction
       resolve_param(instr, instr.a)
       resolve_param(instr, instr.b)
     end
@@ -45,7 +46,7 @@ class Assemblinker
     end
 
     @instructions.each do |instr|
-      instr_bytes = instr.bytes
+      instr_bytes = instr.words
       encstr = 'v' * instr_bytes.size
       output << instr_bytes.pack(encstr)
     end
@@ -54,7 +55,7 @@ class Assemblinker
   # Print a side-by-side assembly/binary listing.
   def print_hex_and_instr
     @instructions.each do |instr|
-      instr_bytes = instr.bytes
+      instr_bytes = instr.words
       fstr = "%x " * instr_bytes.size
       puts "#{instr.to_s} \t #{fstr % instr_bytes}"
     end

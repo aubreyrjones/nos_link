@@ -4,6 +4,7 @@ INDIRECT_RE = /\[(.*)\]/i
 
 EMBED_R_RE = /\+?\{(.*)\}\+?/
 
+VALUE_RE = /^(#{regex_keys(VALUES)})$/i
 
 # Set the offset from a numeric token.
 def accum_offset(token, table)
@@ -32,6 +33,8 @@ def set_embed_r(token, table)
   table[:embed_r] = token
 end
 
+SPACE_PLUS = /\s+|\+/
+
 # Parse the parameter expression.
 def parse_param_expr(expr)
   ret_table = Hash.new
@@ -41,29 +44,29 @@ def parse_param_expr(expr)
   else 
     ret_table[:indirect] = false
   end
-
-  expr.gsub!(/\s+/, '') #remove spaces
-  if expr =~ VALUE_RE
-    ret_table[:value] = VALUES[$1.downcase]
-    return
+  
+  if expr =~ /#\{/
+    raise ParseError.new('The digraph " #{ " is reserved for future ruby macro support.');
   end
 
-  tokens = expr.split("+")
-  if tokens.nil? || tokens.size == 0
-    raise  ParseError.new("No parameter given.")
-  end
+  #tokenize this portion.
+  part = ['blah', 'blah', expr]
+  while true
+    part = part[2].partition(SPACE_PLUS)
+    if part[0].empty?
+      break
+    end
 
-  tokens.each do |tok|
-    if tok =~ HEX_RE || tok =~ DEC_RE
+    tok = part[0]
+    if tok =~ VALUE_RE
+      ret_table[:value] = VALUES[tok.strip.downcase]
+    elsif tok =~ HEX_RE || tok =~ DEC_RE
       accum_offset(tok, ret_table)
-    elsif tok =~ REG_CAP_RE
-      set_register($1, ret_table)
-    elsif tok =~ LABEL_CAP_RE
-      set_reference_label(tok, ret_table)
-#    elsif tok =~ EMBED_R_RE
-#      set_embed_r(tok, ret_table)
-    else
-      raise ParseError.new("Unrecognized token. #{tok}")
+    elsif tok =~ REGISTER_RE
+      set_register(tok.strip.downcase, ret_table)
+    elsif tok =~ LABEL_RE
+      set_reference(tok, ret_table)
     end
   end
+  return ret_table
 end

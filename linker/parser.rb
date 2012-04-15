@@ -51,28 +51,26 @@ class ObjectModule
   # References are not handled at this stage.
   def definitions_pass
     last_global_symbol = nil
-    @lines.each_with_index do |line, line_number|
-      next if empty_line(line)
-      if line =~ LABEL_DEF_RE
-        if empty_line($1)
-          next
-        end
-        label = $1.strip
-        parent = nil
-        if label.start_with?('.')
-          parent = last_global_symbol
-        end
-        defined_symbol = AsmSymbol.new(@filename, label, parent)
-        @module_symbols[defined_symbol.name] = defined_symbol
-        if parent.nil? #it's a global
-          last_global_symbol = defined_symbol
-        else #it's a local, attach dependency.
-          last_global_symbol.attach_local(defined_symbol) 
-        end
-
-      elsif line =~ HIDDEN_SYM_RE
-        hidden_symbol = $2
-        @module_private_symbols << hidden_symbol
+    @parse_tree.each do |abs_line|
+      if abs_line[:directive] =~ /(\.hidden)|(\.private)/i
+        @module_private_symbols << abs_line[:directive_rem].strip
+        next
+      end
+      
+      next unless abs_line[:label]
+      
+      parent = nil
+      if abs_line[:label_local]
+        parent = last_global_symbol
+      end
+      defined_symbol = AsmSymbol.new(@filename, abs_line[:label], parent)
+      
+      @module_symbols[defined_symbol.name] = defined_symbol
+      
+      if parent.nil? #it's a global
+        last_global_symbol = defined_symbol
+      else #it's a local, attach dependency.
+        last_global_symbol.attach_local(defined_symbol) 
       end
     end
   end
@@ -157,85 +155,45 @@ class ObjectModule
     current_section = :text
 
 
-    @lines.each_with_index do |line, line_number|
-      if empty_line(line)
-        next
-      end
-
-      if line =~ HIDDEN_SYM_RE 
-        #already used by the definitions phase
-        next
-      end
-
-      if line =~ /^\s*(#{SECTION_RE})\s*$/
-        case $1
-        when '.text'
-          current_section = :text
-        when '.data'
-          current_section = :data
-        end
-
-        next
-      end
-
-      if line =~ /^\s*(#{DIRECTIVE_RE})/
-        #only visibility at the moment, skip
-        next
-      end
-
-      if line =~ /^\s*(#{NULL_DIR_RE})/
-        #null ops that we ignore
-        next
-      end
-
-      if line =~ /^\s*#{LABEL_DEF_RE}\s*$/
-        #this is a standalone symbol definition, save it to define it later.
-        label_def = $1.strip
-        last_global_symbol = parse_label_pending(label_def, last_global_symbol, pending_symbols)
-        next
-      end
-
-#      debugger
-      unless line =~ STRING_LINE || line =~ TWO_PARAM_LINE || line =~ ONE_PARAM_LINE
-        parse_error_stop("Cannot parse line.", @filename, line_number, line)
-      end
-
-      label = $1
-      instruction = $2.downcase
-      param_a = $3
-      param_b = $4
+    @parse_tree.each do |abs_line|
       
-      param_a.strip if param_a
-      param_b.strip if param_b
-
-      unless empty_line(label)
-        label_def = label.strip
-        last_global_symbol = parse_label_pending(label_def, last_global_symbol, pending_symbols)
+      if abs_line[:label] #stack up labels
+        last_global_symbol = parse_label_pending(abs_line[:label], last_global_symbol, pending_symbols)
       end
-
-      instr = nil
-
-      if instruction =~ DATA_WORD_RE || instruction.strip =~ /\.string|\.asciz/i
-        begin
-          instr = InlineData.new(@filename, last_global_symbol, pending_symbols, param_a, line_number)
-        rescue ParseError => e
-          parse_error_stop(e.msg, @filename, line_number, line)
+      
+      if abs_line[:instr]
+        param_a = nil
+        param_b = nil
+        if abs_line[:param_a]
+          param_a = Param.new(abs_line[:param_a])
+          if abs_line[:param_b]
+            param_b = Param.new(abs_line[:param_b])
+          end
         end
-      else #try to parse as regular instruction
         
-        begin
-          instr = Instruction.new(@filename, last_global_symbol, pending_symbols, instruction, param_a, param_b, line_number)
-        rescue ParseError => e
-          parse_error_stop(e.msg, @filename, line_number, line)
-        end
+        instr = Instruction.new(@filename, 
+                                last_global_symbol, 
+                                pending_symbols, 
+                                abs_line[:instr], 
+                                param_a, 
+                                param_b,
+                                abs_line[:line_number])
+        define_and_push(instr, pending_symbols)
+        pending_symbols = []
+      elsif abs_line[:directive] =~ /(\.asciz)|(\.word)|(\.string)/i
+        instr = InlineData.new(@filename, last_global_symbol, pending_symbols, abs_line)
+        define_and_push(instr, pending_symbols)
+        pending_symbols = []
       end
-
-      pending_symbols.each do |sym|
-        sym.define(instr)
-      end
-      pending_symbols = []
-      @instructions << instr
     end
+  end
+  
+  def define_and_push(instr, pending_symbols)
+    pending_symbols.each do |sym|
+      sym.define(instr)
+    end
+    
+    @instructions << instr
   end
 
   def new_tokenize
@@ -252,10 +210,12 @@ class ObjectModule
   def parse
     normalize()
     new_tokenize
-    puts @parse_tree.map {|abstract| abstract.inspect}
+    definitions_pass
+    #puts @module_symbols.inspect
+    #puts @parse_tree.map {|abstract| abstract.inspect}
     #definitions_pass()
-    #mangle_and_merge()
-    #do_main_pass()
+    mangle_and_merge()
+    do_main_pass()
   end
 
   # Print a listing of this module.

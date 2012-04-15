@@ -9,6 +9,24 @@ def declare(map, start, string)
   end
 end
 
+def regex_keys(h)
+  return /(#{h.keys.join(")|(")})/i
+end
+
+def parse_warning(filename, line_no, line_str, msg)
+  puts "Parse Warning on line #{line_no} in #{filename}:"
+  puts "\t#{msg}"
+  puts "Line:\t#{line_str}"
+end
+
+class ParseError < Exception
+  attr_accessor :msg
+  def initialize(msg)
+    @msg = msg
+  end
+end
+
+
 INSTRUCTIONS = Hash.new
 EXTENDED_INSTRUCTIONS = Hash.new
 REGISTERS = Hash.new
@@ -40,18 +58,38 @@ INDIRECT_NEXT = 0x1e
 LITERAL_NEXT = 0x1f
 SHORT_LITERAL_OFFSET = 0x20
 
+HEX_RE = /^0x([0-9a-f]+)$/i
+DEC_RE = /^(\d+)$/
+
+#definition of a legal label or source symbol
+LABEL_RE = /[\._a-z]+[a-z0-9\._]+/i
+
+LABEL_REF_TOK_RE = /^[\._a-z]+[a-z0-9\._]+$/i
+
+#label definition token
+LABEL_DEF = /^\s*(:#{LABEL_RE})|(#{LABEL_RE}:)\s*$/i
+
+#instruction token
+INSTR_RE = /^\s*#{regex_keys(INSTRUCTIONS)}|#{regex_keys(EXTENDED_INSTRUCTIONS)}\s*$/i
+
+#Directive tokens
+DIRECT_RE = /^\s*#{regex_keys(DIRECTIVES)}\s*$/i
+
+#register
+REGISTER_RE = /^\s*#{regex_keys(REGISTERS)}\s*$/i
+
+
 
 class Param
   attr_accessor :offset, :reference_token, :reference_address, :register, :indirect, :embed_r
 
-  def initialize(parse_table, instruction)
+  def initialize(parse_table)
     @offset = parse_table[:offset]
     @reference_token = parse_table[:reference]
     @register = parse_table[:register]
     @indirect = parse_table[:indirect]
     @value = parse_table[:value]
     @embed_r = parse_table[:embed_r]
-    @instr = instruction
     
     @reference_address = nil
   end
@@ -118,7 +156,7 @@ class Param
   def param_word
     if @reference_token
       if @reference_address.nil?
-        raise ParseError.new("Undefined reference to: #{@reference_token}", @instr)
+        raise ParseError.new("Undefined reference to: #{@reference_token}")
       end
       off = 0
       if @offset
@@ -177,7 +215,7 @@ class Param
       end
     end
     
-    raise ParseError.new("Cannot build mode lines.", @instr);
+    raise ParseError.new("Cannot build mode bits.");
   end    
 end
 
@@ -210,6 +248,7 @@ class Instruction
       end
       @extended = true
     end
+
     if @a.needs_word?
       @size += 1
     end
@@ -270,33 +309,42 @@ end
 class InlineData
   attr_reader :words
   attr_reader :address
-  attr_accessor :source, :scope, :line, :defined_symbols
+  attr_accessor :source, :scope, :defined_symbols
 
-  def initialize(source_file, global_scope, labels, value_token, line_number)
-    @value_token = value_token
+  def initialize(source_file, global_scope, labels, abstract_line)
+    @abs_line = abstract_line
     @scope = global_scope
     @source = source_file
-    @line = line_number
     @defined_symbols = labels
     @module = AsmSymbol::make_module_name(source_file)
 
     @words = []
 
-    parse_data(@value_token)
+    parse_data
   end
 
-  def parse_data(token)
-    if token.start_with?('"')
-      raise ParseError.new("No closing quotes on string.", @instr) unless token.end_with?('"')
-      
-      str = token[1..-2]
+  def line
+    @abs_line[:line_number]
+  end
+  
+  def parse_data
+    if @abs_line[:directive].downcase == /(string)|(asciz)/
+      str = @abs_line[:directive_rem].strip.token[1..-2]
       str.each_byte do |byte|
         @words << byte #this is okay, just the values
       end
-    elsif token =~ HEX_RE
-      @words << $1.to_i(16)
-    elsif token =~ DEC_RE
-      @words << $1.to_i(10)
+      return
+    end
+      
+    if @abs_line[:directive].downcase == /(word)|(uint16_t)/
+      literals = @abs_line[:directive_rem].gsub!(/\s+/, '').split(",")
+      literals.each do |lit|
+        if lit =~ HEX_RE
+          @words << $1.to_i(16)
+        elsif lit =~ DEC_RE   
+          @words << $1.to_i(10)
+        end 
+      end
     end
   end
 

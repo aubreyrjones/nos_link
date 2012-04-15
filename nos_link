@@ -9,7 +9,7 @@ $config = Trollop::options do
   banner <<-EOS
 USAGE: nos_link -o output_binary assembly_module [space separated list of additional modules]
 EOS
-  opt :output_binary, "Name of the output x10b-format binary.", :type => :string, :default => "out.x10b"
+  opt :output_binary, "Name of the raw format output binary.", :type => :string, :default => "out.dcpu16"
   opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
   opt :pre_bin, "Print a pseudo-listing. This is essentially a text representation of the binary image.", :type => :boolean
   opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean

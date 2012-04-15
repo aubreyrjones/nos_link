@@ -1,19 +1,11 @@
 require 'rubygems'
 require File.expand_path(File.dirname(__FILE__) + '/resolve.rb')
 
-class InvalidOp < Exception
-  attr_accessor :msg, :op
-  def initialize(message, op)
+class ParseError < Exception
+  attr_accessor :msg, :instr
+  def initialize(message, errant_instruction)
     @msg = message
-    @op = op
-  end
-end
-
-class ParamError < Exception
-  attr_accessor :msg, :param
-  def initialize(message, param)
-    @msg = message
-    @param = param
+    @instr = errant_instruction
   end
 end
 
@@ -119,17 +111,17 @@ $DONT_STOP_ON_ERROR = false
 
 def parse_error_stop(reason, source_file, line_number, line)
   puts "FATAL LINK ERROR"
-  puts "Error #{reason}"
+  puts "Error: #{reason}"
   puts "in file #{source_file} on line #{line_number + 1}"
   puts "Errant Line: #{line}"
-  raise Exception.new
+  raise Exception.new if $config[:hacking]
   exit 1 unless $DONT_STOP_ON_ERROR
 end
 
 class Param
   attr_accessor :offset, :reference_token, :reference_address, :register, :indirect
 
-  def initialize(param_expression)
+  def initialize(param_expression, instruction)
     @token = param_expression
     @offset = nil
     @reference_token = nil
@@ -137,6 +129,7 @@ class Param
     @register = nil
     @indirect = false
     @value = nil
+    @instr = instruction
 
     parse_expression(param_expression)
   end
@@ -203,7 +196,7 @@ class Param
   def param_word
     if @reference_token
       if @reference_address.nil?
-        raise ParamError.new("Undefined reference to: #{@reference_token}", @token)
+        raise ParseError.new("Undefined reference to: #{@reference_token}", @instr)
       end
       off = 0
       if @offset
@@ -261,9 +254,8 @@ class Param
         return LITERAL_NEXT
       end
     end
-
-    puts @token
-    exit
+    
+    raise ParseError.new("Cannot build mode lines.", @instr);
   end
   
   # Set the offset from a numeric token.
@@ -279,7 +271,7 @@ class Param
   def set_register(token)
     @register = REGISTERS[token.downcase]
     if @register.nil?
-      raise ParamError.new("Unknown register.", token)
+      raise ParseError.new("Unknown register.", @instr)
     end
   end
 
@@ -303,7 +295,7 @@ class Param
 
     tokens = expr.split("+")
     if tokens.nil? || tokens.size == 0
-      raise ParamError.new("No parameter given.", expr)
+      raise  ParseError.new("No parameter given.", @instr)
     end
 
     tokens.each do |tok|
@@ -315,7 +307,7 @@ class Param
         set_reference_label(tok)
       else
         puts tok
-        raise ParamError.new("Bad token.", expr)
+        raise ParseError.new("Unrecognized token.", @instr)
       end
     end
   end
@@ -349,13 +341,13 @@ class Instruction
       @extended = true
     end
     
-    @a = Param.new(@param_a)
+    @a = Param.new(@param_a, self)
     if @a.needs_word?
       @size += 1
     end
     
     unless @extended
-      @b = Param.new(@param_b)
+      @b = Param.new(@param_b, self)
       if @b.needs_word?
         @size += 1
       end
@@ -428,7 +420,7 @@ class InlineData
 
   def parse_data(token)
     if token.start_with?('"')
-      raise ParamError.new("No closing quotes on string.", token) unless token.end_with?('"')
+      raise ParseError.new("No closing quotes on string.", @instr) unless token.end_with?('"')
       
       str = token[1..-2]
       str.each_byte do |byte|
@@ -738,15 +730,15 @@ class ObjectModule
       if instruction =~ DATA_WORD_RE || instruction.strip =~ /\.string|\.asciz/i
         begin
           instr = InlineData.new(@filename, last_global_symbol, pending_symbols, param_a, line_number)
-        rescue ParamError => e
+        rescue ParseError => e
           parse_error_stop(e.msg, @filename, line_number, line)
         end
       else #try to parse as regular instruction
         
         begin
           instr = Instruction.new(@filename, last_global_symbol, pending_symbols, instruction, param_a, param_b, line_number)
-        rescue ParamError => e
-        parse_error_stop(e.msg, @filename, line_number, line)
+        rescue ParseError => e
+          parse_error_stop(e.msg, @filename, line_number, line)
         end
       end
 

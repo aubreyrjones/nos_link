@@ -34,12 +34,14 @@ VALUES = Hash.new
 
 # Operational directives
 DIRECTIVES = Hash.new
+NULL_DIRS = Hash.new
   
 declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc o")
 declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16 .string .asciz .data .text')
+declare(NULL_DIRS, 0x00, '.globl .global .extern .align')
 
 REV_REG = {}
 REGISTERS.each_pair do |k, v|
@@ -70,13 +72,15 @@ LABEL_REF_TOK_RE = /^[\._a-z]+[a-z0-9\._]+$/i
 LABEL_DEF = /^\s*(:#{LABEL_RE})|(#{LABEL_RE}:)\s*$/i
 
 #instruction token
-INSTR_RE = /^\s*#{regex_keys(INSTRUCTIONS)}|#{regex_keys(EXTENDED_INSTRUCTIONS)}\s*$/i
+INSTR_RE = /^#{regex_keys(INSTRUCTIONS)}|#{regex_keys(EXTENDED_INSTRUCTIONS)}$/i
 
 #Directive tokens
-DIRECT_RE = /^\s*#{regex_keys(DIRECTIVES)}\s*$/i
+DIRECT_RE = /^#{regex_keys(DIRECTIVES)}$/i
+
+NULL_DIR_RE = /^#{regex_keys(NULL_DIRS)}$/i
 
 #register
-REGISTER_RE = /^\s*#{regex_keys(REGISTERS)}\s*$/i
+REGISTER_RE = /^#{regex_keys(REGISTERS)}$/i
 
 
 
@@ -220,19 +224,18 @@ class Param
 end
 
 class Instruction
-  attr_reader :address
-  attr_accessor :opcode, :a, :b, :source, :scope, :line, :defined_symbols
+  attr_reader :address, :abs_line
+  attr_accessor :opcode, :a, :b, :source, :scope, :defined_symbols
   
-  def initialize(source_file, global_scope, labels, opcode_token, param_a, param_b, line_number)
+  def initialize(source_file, global_scope, labels, parsed_line, param_a, param_b)
+    @abs_line = parsed_line
     @source = source_file
     @scope = global_scope
     @defined_symbols = labels
     
-    @opcode_token = opcode_token
+    @opcode_token = @abs_line[:instr]
     @a = param_a
     @b = param_b
-    
-    @line = line_number
     
     @module = AsmSymbol::make_module_name(source_file)
     @extended = false
@@ -258,6 +261,10 @@ class Instruction
         @size += 1
       end
     end
+  end
+  
+  def line
+    return @abs_line[:original_line]
   end
 
   # Fix this instruction to a particular address in the program.
@@ -328,16 +335,19 @@ class InlineData
   end
   
   def parse_data
-    if @abs_line[:directive].downcase == /(string)|(asciz)/
-      str = @abs_line[:directive_rem].strip.token[1..-2]
+    if @abs_line[:directive] =~ /(string)|(asciz)/i
+      str = @abs_line[:directive_rem].strip[1..-2]
       str.each_byte do |byte|
         @words << byte #this is okay, just the values
+      end
+      if @abs_line[:directive] =~ /asciz/
+        @words << 0x0
       end
       return
     end
       
-    if @abs_line[:directive].downcase == /(word)|(uint16_t)/
-      literals = @abs_line[:directive_rem].gsub!(/\s+/, '').split(",")
+    if @abs_line[:directive]=~ /(word)|(uint16_t)/i
+      literals = @abs_line[:directive_rem].gsub(/\s+/, '').split(",")
       literals.each do |lit|
         if lit =~ HEX_RE
           @words << $1.to_i(16)
@@ -367,8 +377,11 @@ class InlineData
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    words = @words.map{|w| "\t.word 0x#{w.to_s(16)}"}.join("\n")
-    return "#{labels}\t#{words}#{addr_line}"
+    words = @words.map{|w| "\t.word 0x#{w.to_s(16)}"}
+    if words.size > 0
+      words[0] << addr_line
+    end
+    return "#{labels}#{words.join("\n")}"
   end
 end
 

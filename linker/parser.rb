@@ -22,7 +22,7 @@ end
 
 #Represents a single .S module file.
 class ObjectModule
-  attr_reader :filename, :lines
+  attr_reader :filename, :lines, :parse_tree
   attr_accessor :instructions, :module_symbols, :program_symbols
 
 
@@ -174,10 +174,9 @@ class ObjectModule
         instr = Instruction.new(@filename, 
                                 last_global_symbol, 
                                 pending_symbols, 
-                                abs_line[:instr], 
+                                abs_line, 
                                 param_a, 
-                                param_b,
-                                abs_line[:line_number])
+                                param_b)
         define_and_push(instr, pending_symbols)
         pending_symbols = []
       elsif abs_line[:directive] =~ /(\.asciz)|(\.word)|(\.string)/i
@@ -208,7 +207,6 @@ class ObjectModule
   
   # Parse the source file into an abstract representation.
   def parse
-    normalize()
     new_tokenize
     definitions_pass
     #puts @module_symbols.inspect
@@ -218,6 +216,12 @@ class ObjectModule
     do_main_pass()
   end
 
+  def print_abstract
+    @parse_tree.each do |abs_line|
+      puts abs_line.inspect()
+    end
+  end
+  
   # Print a listing of this module.
   def print_listing
     outlines = @instructions.map {|ins| ins.to_s}

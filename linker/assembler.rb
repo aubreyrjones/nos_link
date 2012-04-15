@@ -57,7 +57,7 @@ class Assemblinker
     @instructions.each do |instr|
       instr_bytes = instr.words
       fstr = "%x " * instr_bytes.size
-      puts "#{instr.to_s} \t #{fstr % instr_bytes}"
+      puts "#{instr.to_s} \t ;#{fstr % instr_bytes}"
     end
   end
 

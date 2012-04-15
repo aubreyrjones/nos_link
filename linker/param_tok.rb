@@ -33,10 +33,10 @@ def set_embed_r(token, table)
   table[:embed_r] = token
 end
 
-SPACE_PLUS = /\s+|\+/
+SPACE_PLUS = /\s+|\+|;/
 
 # Parse the parameter expression.
-def parse_param_expr(expr)
+def parse_param_expr(instr_hash, expr)
   ret_table = Hash.new
   if expr =~ INDIRECT_RE
     expr = $1
@@ -45,12 +45,12 @@ def parse_param_expr(expr)
     ret_table[:indirect] = false
   end
   
-  if expr =~ /#\{/
-    raise ParseError.new('The digraph " #{ " is reserved for future ruby macro support.');
+  if expr.strip.start_with?('{')
+    raise ParseError.new('The symbol " { " is reserved for future ruby macro support.');
   end
 
   #tokenize this portion.
-  part = ['blah', 'blah', expr]
+  part = ['blah', 'blah', expr.lstrip]
   while true
     part = part[2].partition(SPACE_PLUS)
     if part[0].empty?
@@ -60,6 +60,7 @@ def parse_param_expr(expr)
     tok = part[0]
     if tok =~ VALUE_RE
       ret_table[:value] = VALUES[tok.strip.downcase]
+      break
     elsif tok =~ HEX_RE || tok =~ DEC_RE
       accum_offset(tok, ret_table)
     elsif tok =~ REGISTER_RE

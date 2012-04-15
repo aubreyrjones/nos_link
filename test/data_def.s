@@ -2,6 +2,8 @@
 	.word 0x10
 :string_ref
 	.string "aaaaaaaaaaaaaaaaaaaaa"
+:zero_str
+	.asciz "bbbbbbbbbbbbbbbbbbbbbb"
 :global_dec
 	.word 10
 	.word 10

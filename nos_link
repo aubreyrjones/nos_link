@@ -18,6 +18,7 @@ EOS
   opt :loader, "Choose which loader stub to use. Choose from: #{KNOWN_LOADERS.join(',')}", :type => :string, :default => KNOWN_LOADERS[0]
   opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
   opt :hacking, "Are you hacking on nos_link? You want exceptions, don't you?", :type => :boolean
+  opt :base_address, "Assemble to a different base address.", :type => :integer, :default => 0
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
@@ -75,8 +76,8 @@ end
 
 assembler = Assemblinker.new(symbol_table, instruction_stream)
 
-assembler.fix
 assembler.assemble
+assembler.fix
 
 if $config[:pre_bin]
   puts instruction_stream.join("\n")

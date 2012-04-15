@@ -11,15 +11,6 @@ class Assemblinker
     @instructions = instructions
   end
 
-  # Fix all instructions into their address space.
-  def fix
-    assembled_address = 0
-    @instructions.each do |instr|
-      instr.fix(assembled_address)
-      assembled_address += instr.size
-    end
-  end
-
   # Resolve all instruction parameters.
   # At this stage, the program is done in an abstract sense.
   # All that's left is turning the abstract instructions into binary.
@@ -28,6 +19,15 @@ class Assemblinker
       next unless instr.class == Instruction
       resolve_param(instr, instr.a)
       resolve_param(instr, instr.b)
+    end
+  end
+
+  # Fix all instructions into their address space.
+  def fix
+    assembled_address = $config[:base_address]
+    @instructions.each do |instr|
+      instr.fix(assembled_address)
+      assembled_address += instr.size
     end
   end
 
@@ -73,6 +73,6 @@ class Assemblinker
       exit 1
     end
 
-    param.resolve(ref_sym.def_instr.address)
+    param.resolve(ref_sym)
   end
 end

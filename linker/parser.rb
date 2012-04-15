@@ -19,11 +19,13 @@ def parse_error_stop(e, source_file, line_number, line)
   exit 1 unless $DONT_STOP_ON_ERROR
 end
 
+class CompactObjectModule
+end
 
 #Represents a single .S module file.
 class ObjectModule
   attr_reader :filename, :lines, :parse_tree
-  attr_accessor :instructions, :module_symbols, :program_symbols
+  attr_accessor :instructions, :module_symbols, :program_symbols, :functions
 
 
   # Create a module from source lines.
@@ -34,12 +36,8 @@ class ObjectModule
     @module_symbols = {}
     @program_symbols = {}
     @module_private_symbols = []
+    @functions = {}
     @parse_tree = []
-  end
-
-  # Clean and normalize the source
-  def normalize
-    @lines.map! {|line| line.gsub(/;.*$/, '').gsub(/\s+/, ' ').strip}
   end
 
   # Is this line empty?
@@ -129,18 +127,17 @@ class ObjectModule
   # If the resolved symbol is not local, then it is returned as the last global symbol.
   # Otherwise, if the resolved symbol is local, then the given last_global_symbol
   # will be returned.
-  def parse_label_pending(label_def, last_global_symbol, pending_symbols)
-    retval = []
+  def parse_label_pending(abs_line, last_global_symbol, pending_symbols)
     new_local = false
-    if label_def.start_with?('.')
+    if abs_line[:label_local]
       new_local = true
-      resolved_symbol = resolve(@program_symbols, @filename, label_def, last_global_symbol)
+      resolved_symbol = resolve(@program_symbols, @filename, abs_line[:label], last_global_symbol)
     else
       new_local = false
-      resolved_symbol = resolve(@program_symbols, @filename, label_def, nil)
+      resolved_symbol = resolve(@program_symbols, @filename, abs_line[:label], nil)
     end
     if resolved_symbol.nil?
-      puts "Resolved null symbol (#{label_def}) during parse phase. Should not happen."
+      puts "Resolved null symbol (#{abs_line[:label]}) during parse phase. Should not happen."
       exit 1
     end
 
@@ -153,12 +150,11 @@ class ObjectModule
     pending_symbols = []
     last_global_symbol = nil #might also be hidden
     current_section = :text
-
-
+    
     @parse_tree.each do |abs_line|
       
       if abs_line[:label] #stack up labels
-        last_global_symbol = parse_label_pending(abs_line[:label], last_global_symbol, pending_symbols)
+        last_global_symbol = parse_label_pending(abs_line, last_global_symbol, pending_symbols)
       end
       
       if abs_line[:instr]

@@ -40,7 +40,7 @@ declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn if
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc o")
-declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16_t .string .asciz .data .text')
+declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16_t .string .asciz .data .text .func .endfunc')
 declare(NULL_DIRS, 0x00, '.globl .global .extern .align')
 
 REV_REG = {}
@@ -85,7 +85,7 @@ REGISTER_RE = /^#{regex_keys(REGISTERS)}$/i
 
 
 class Param
-  attr_accessor :offset, :reference_token, :reference_address, :register, :indirect, :embed_r
+  attr_accessor :offset, :reference_token, :reference_symbol, :register, :indirect, :embed_r
 
   def initialize(parse_table)
     @offset = parse_table[:offset]
@@ -95,7 +95,7 @@ class Param
     @value = parse_table[:value]
     @embed_r = parse_table[:embed_r]
     
-    @reference_address = nil
+    @reference_symbol = nil
   end
 
   # Get a reconstructed textual representation of this parameter,
@@ -112,8 +112,8 @@ class Param
     end
 
     if @reference_token
-      if @reference_address
-        buf << "0x#{@reference_address.to_s(16)}"
+      if @reference_symbol
+        buf << "0x#{@reference_symbol.def_instr.address.to_s(16)}"
       else
         buf << reference_token
       end
@@ -152,21 +152,21 @@ class Param
   end
 
   # Set the reference address for the parameter
-  def resolve(ref_address)
-    @reference_address = ref_address
+  def resolve(ref_symbol)
+    @reference_symbol = ref_symbol
   end
 
   # Get the additional word of instruction needed, or nil if none necessary.
   def param_word
     if @reference_token
-      if @reference_address.nil?
+      if @reference_symbol.nil?
         raise ParseError.new("Undefined reference to: #{@reference_token}")
       end
       off = 0
       if @offset
         off += @offset
       end
-      return @reference_address + off
+      return @reference_symbol.def_instr.address + off
     end
 
     if @offset && needs_word?
@@ -277,11 +277,19 @@ class Instruction
   def realize
     @words = [opcode]
     if @a.needs_word?
-      @words << @a.param_word
+      p_word = @a.param_word
+      if p_word > 0xffff
+        raise ParseError.new("Word greater than 0xfff.")
+      end
+      @words << p_word
     end
 
     if @b && @b.needs_word?
-      @words << @b.param_word
+      p_word = @b.param_word
+      if p_word > 0xffff
+        raise ParseError.new("Word greater than 0xfff.")
+      end
+      @words << p_word
     end
   end
 
@@ -458,5 +466,26 @@ class AsmSymbol
   # Generate a module name from a filename.
   def self.make_module_name(filename)
     filename.gsub(/^\.+/, '').gsub('/', '_')
+  end
+end
+
+class NosFunction
+  attr_accessor :name, :mod, :symbol, :first_instr, :last_instr
+  
+  def initialize(name)
+    @name = name
+  end
+end
+
+class AsmModule
+  attr_reader :name, :filename, :parse_tree, :instructions, :symbols, :functions
+  
+  def initialize(filename, parse_tree, instructions, symbols, functions)
+    @name = AbsSymbol::make_module_name(filename)
+    @filename = filename
+    @parse_tree = parse_tree
+    @instructions = instructions
+    @symbols = symbols
+    @functions = functions
   end
 end

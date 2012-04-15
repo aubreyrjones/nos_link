@@ -1,38 +1,7 @@
-# stick consecutive name->number pairings into a hash
-def declare(map, start, string)
-  count = start
-  string.split(" ").each do |token|
-    map[token] = count
-    count += 1
-  end
-end
-
-INSTRUCTIONS = Hash.new
-EXTENDED_INSTRUCTIONS = Hash.new
-REGISTERS = Hash.new
-VALUES = Hash.new
-
-# Operational directives
-DIRECTIVES = Hash.new
-  
-declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
-declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
-declare(REGISTERS, 0, "a b c x y z i j h")
-declare(VALUES, 0x18, "pop peek push sp pc o")
-declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16 .string .asciz .data .text ')
-
-REV_REG = {}
-REGISTERS.each_pair do |k, v|
-  REV_REG[v] = k
-end
-
-REV_VALS = {}
-VALUES.each_pair do |k, v|
-  REV_VALS[v] = k
-end
+require File.expand_path(File.dirname(__FILE__) + '/abstract_asm.rb')
 
 def regex_keys(h)
-  return /(#{h.keys.join(")|(")})/
+  return /(#{h.keys.join(")|(")})/i
 end 
 
 HEX_RE = /^0x([0-9a-f]+)$/i
@@ -52,9 +21,11 @@ DIRECT_RE = /#{regex_keys(DIRECTIVES)}/i
 
 SPACE = /\s+/i
 
+
 def parse_warning(filename, line_no, line_str, msg)
-  puts "Parse Warning: #{msg}"
-  puts "\tin #{filename}, line #{line_no}"
+  puts "Parse Warning on line #{line_no} in #{filename}:"
+  puts "\t#{msg}"
+  puts "Line:\t#{line_str}"
 end
 
 class ParseError < Exception
@@ -63,6 +34,9 @@ class ParseError < Exception
     @msg = msg
   end
 end
+
+require File.expand_path(File.dirname(__FILE__) + '/param_tok.rb')
+
 
 def parse_instruction_line(ret_table, instr_tok, line_rem)
   param_toks = line_rem.split(',')
@@ -73,10 +47,12 @@ def parse_instruction_line(ret_table, instr_tok, line_rem)
   
   if param_toks.size > 0
     ret_table[:a_token] = param_toks[0]
+    ret_table[:a_param] = parse_param_expr(param_toks[0]) 
   end
   
   if param_toks.size > 1
     ret_table[:b_token] = param_toks[1]
+    ret_table[:b_param] = parse_param_expr(param_toks[0])
   end
 end
 
@@ -85,6 +61,7 @@ end
 # So, no comments, all multispaces are replaced with single. And leading/trailing space is removed
 def tokenize_line(filename, line_no, line_str)
   ret_table = Hash.new
+  ret_table[:original_line] = line_str
   part = ['blah', 'blah', line_str]
   while true
     part = part[2].partition(SPACE)
@@ -101,16 +78,22 @@ def tokenize_line(filename, line_no, line_str)
       ret_table[:label] = label
       next
     elsif token =~ INSTR_RE
-      ret_table[:instr_token] = token.downcase
+      ret_table[:instr] = token.downcase
       ret_table[:instr_rem] = part[2]
+      break
     elsif token =~ DIRECT_RE
-      ret_table[:directive_token] = token.downcase
+      ret_table[:directive] = token.downcase
       ret_table[:directive_rem] = part[2]
-      return
+      break
     elsif token.start_with?('.')
       parse_warning(filename, line_no, line_str, "Unknown directive '#{token}'.")
+      ret_table[:unknown_directive] = token.downcase
+      ret_table[:unknown_directive_rem] = part[2]
+      break
     else
-      raise ParseError.new("Unknown parse error.")
+      raise ParseError.new("Bad token: #{token}.")
     end
   end
+
+  return ret_table
 end

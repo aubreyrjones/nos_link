@@ -1,3 +1,4 @@
+require File.expand_path(File.dirname(__FILE__) + '/abstract_asm.rb')
 #indirect?
 INDIRECT_RE = /\[(.*)\]/i
 
@@ -32,7 +33,7 @@ def set_embed_r(token, table)
 end
 
 # Parse the parameter expression.
-def parse_expression(expr)
+def parse_param_expr(expr)
   ret_table = Hash.new
   if expr =~ INDIRECT_RE
     expr = $1
@@ -59,8 +60,8 @@ def parse_expression(expr)
       set_register($1, ret_table)
     elsif tok =~ LABEL_CAP_RE
       set_reference_label(tok, ret_table)
-    elsif tok =~ EMBED_R_RE
-      set_embed_r(tok, ret_table)
+#    elsif tok =~ EMBED_R_RE
+#      set_embed_r(tok, ret_table)
     else
       raise ParseError.new("Unrecognized token. #{tok}")
     end

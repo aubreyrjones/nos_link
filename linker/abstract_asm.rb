@@ -1,16 +1,59 @@
+
+
+# stick consecutive name->number pairings into a hash
+def declare(map, start, string)
+  count = start
+  string.split(" ").each do |token|
+    map[token] = count
+    count += 1
+  end
+end
+
+INSTRUCTIONS = Hash.new
+EXTENDED_INSTRUCTIONS = Hash.new
+REGISTERS = Hash.new
+VALUES = Hash.new
+
+# Operational directives
+DIRECTIVES = Hash.new
+  
+declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
+declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
+declare(REGISTERS, 0, "a b c x y z i j h")
+declare(VALUES, 0x18, "pop peek push sp pc o")
+declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16 .string .asciz .data .text')
+
+REV_REG = {}
+REGISTERS.each_pair do |k, v|
+  REV_REG[v] = k
+end
+
+REV_VALS = {}
+VALUES.each_pair do |k, v|
+  REV_VALS[v] = k
+end
+
+INDIRECT_REG_OFFSET = 0x08
+INDIRECT_REG_NEXT_OFFSET = 0x10
+
+INDIRECT_NEXT = 0x1e
+LITERAL_NEXT = 0x1f
+SHORT_LITERAL_OFFSET = 0x20
+
+
 class Param
   attr_accessor :offset, :reference_token, :reference_address, :register, :indirect, :embed_r
 
   def initialize(parse_table, instruction)
-    @parse_table = parse_table
-    @offset = @parse_table[:offset]
-    @reference_token = @parse_table[:reference]
-    @register = @parse_table[:register]
-    @reference_address = nil
-    @indirect = @parse_table[:indirect]
-    @value = @parse_table[:value]
-    @embed_r = @parse_table[:embed_r]
+    @offset = parse_table[:offset]
+    @reference_token = parse_table[:reference]
+    @register = parse_table[:register]
+    @indirect = parse_table[:indirect]
+    @value = parse_table[:value]
+    @embed_r = parse_table[:embed_r]
     @instr = instruction
+    
+    @reference_address = nil
   end
 
   # Get a reconstructed textual representation of this parameter,

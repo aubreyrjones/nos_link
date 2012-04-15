@@ -72,5 +72,7 @@ Example:
       .uint16_t 0x10 ; .uint16_t is an alias for .word
     :string_example
       .string "This is a string."
+    :zero_terminated_string
+      .asciz "This is a zero-terminated string."
 
 (There is currently no support for the comma-separated numeric literals style.)

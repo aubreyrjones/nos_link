@@ -40,7 +40,7 @@ declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn if
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc o")
-declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16 .string .asciz .data .text')
+declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16_t .string .asciz .data .text')
 declare(NULL_DIRS, 0x00, '.globl .global .extern .align')
 
 REV_REG = {}

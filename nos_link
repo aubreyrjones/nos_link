@@ -13,7 +13,7 @@ EOS
   opt :output_binary, "Name of the raw format output binary.", :type => :string, :default => "out.dcpu16"
   opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
   opt :tree_listing, "Print the parsed 'tree' of instructions.", :type => :boolean
-  opt :pre_bin, "Print a pseudo-listing. This is essentially a text representation of the binary image.", :type => :boolean
+  opt :pre_bin, "Print an assembly listing of the final program just before fixing.", :type => :boolean
   opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
   opt :loader, "Choose which loader stub to use. Choose from: #{KNOWN_LOADERS.join(',')}", :type => :string, :default => KNOWN_LOADERS[0]
   opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
@@ -78,12 +78,13 @@ end
 assembler = Assemblinker.new(symbol_table, asm_mods)
 
 assembler.assemble
-assembler.fix
 
 if $config[:pre_bin]
   puts assembler.instr_list.join("\n")
   exit
 end
+
+assembler.fix
 
 if $config[:unref_symbols]
   puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"

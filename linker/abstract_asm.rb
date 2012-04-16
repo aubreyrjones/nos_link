@@ -112,7 +112,7 @@ class Param
     end
 
     if @reference_token
-      if @reference_symbol
+      if @reference_symbol && @reference_symbol.def_instr.address
         buf << "0x#{@reference_symbol.def_instr.address.to_s(16)}"
       else
         buf << reference_token

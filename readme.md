@@ -32,11 +32,11 @@ Try --help for more options.
 Assembler Syntax and Directives
 ------------------------------
 
-nos_link accepts standard Notch-style assembly. This differs from traditional assembly in location of colon in label definition.
+nos_link accepts Notch-style label names, or traditional label names. These differ only in the location of the colon.
 
 Labels may be any collection of letters, numbers, periods, and underscores. They must not start with a digit.
 
-Labels named identically to register names (a, x, i, j...) or operand value names (push, pop, pc, sp...) will be masked by the the register they shadow. This means that if you have a label defined with ':a', it cannot be referenced by any instruction parameter--the expression will be interpreted as the 'a' register instead.
+Labels named identically to register names (a, x, i, j...) or operand value names (push, pop, pc, sp...) will be masked by the register they shadow. This means that if you have a label defined with ':a', it cannot be referenced by any instruction parameter--the expression will be interpreted as the 'a' register instead.
 
 Any label starting with a '.' will be treated as local. They are bound to the most immediately preceeding global label. Local labels may only be referenced by instructions in the same global label scope.
 
@@ -47,7 +47,7 @@ Any label starting with a '.' will be treated as local. They are bound to the mo
       mul a, b
       set pc, .local_label
     
-Currently the only actively supported assembler directive is '.hidden' (which may also be spelled '.private'). The .hidden directive indicates to the linker that the given label is not available for reference from the rest of te program. Additionally, it indicates that the .hidden symbol should be preferred to global symbols of the same name for references from within the same assembly module.
+Currently the only actively supported assembler directive is '.hidden' (which may also be spelled '.private'). The .hidden directive indicates to the linker that the given label is not available for reference from the rest of the program. Additionally, it indicates that the .hidden symbol should be preferred to global symbols of the same name for references from within the same assembly module.
 
 The syntax is:
 

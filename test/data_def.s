@@ -10,6 +10,6 @@
 	.word 10
 :reference
 	set a, [global_dec]
-	set a, [1+global_dec]
+	set a, [global_dec+1]
 	set a, [2+global_dec]
 

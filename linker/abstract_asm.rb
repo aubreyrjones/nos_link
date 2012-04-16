@@ -108,7 +108,7 @@ class Param
     buf = []
 
     if @offset 
-      buf << "0x#{@offset.to_s(16)}"
+      buf << "#{@offset < 0 ? '-' : ''}0x#{@offset.abs.to_s(16)}"
     end
 
     if @reference_token
@@ -190,7 +190,7 @@ class Param
         return @register #only literal register value
       end
       
-      if (@offset && @offset > 0) || @reference_token #resove a label, or use a large offset
+      if @offset || @reference_token #resove a label, or use a large offset
         return @register + INDIRECT_REG_NEXT_OFFSET 
       else
         return @register + INDIRECT_REG_OFFSET
@@ -209,7 +209,7 @@ class Param
     end
 
     if @offset
-      if @offset <= 0x1f && !@indirect
+      if @offset >=0 && @offset <= 0x1f && !@indirect
         return @offset + SHORT_LITERAL_OFFSET
       end
       

@@ -6,13 +6,19 @@ EMBED_R_RE = /\+?\{(.*)\}\+?/
 
 VALUE_RE = /^(#{regex_keys(VALUES)})$/i
 
-# Set the offset from a numeric token.
-def accum_offset(token, table)
-  table[:offset] = 0 unless table[:offset]
-  if token =~ HEX_RE
-    table[:offset] += $1.to_i(16)
-  else token =~ DEC_RE
-    table[:offset] += $1.to_i(10)
+def parse_literal(token, should_negate)
+  sign = should_negate ? -1 : 1
+  base = 10
+  to_i_token = token
+  begin
+    if token.downcase.start_with?('0x')
+      base = 16
+      return token[2..-1].to_i(16) * sign
+    end
+
+    return to_i_token.to_i(base) * sign
+  rescue 
+    raise ParseError("Cannot parse numeric literal '#{token}'.")
   end
 end
 
@@ -33,7 +39,12 @@ def set_embed_r(token, table)
   table[:embed_r] = token
 end
 
-SPACE_PLUS = /\s+|\+|;/
+SPACE_PLUS_MINUS = /\s+|\+|-|;/
+
+def accum_offset(ret_table, value)
+  ret_table[:offset] = 0 unless ret_table[:offset]
+  ret_table[:offset] += value
+end
 
 # Parse the parameter expression.
 def parse_param_expr(instr_hash, expr)
@@ -50,19 +61,37 @@ def parse_param_expr(instr_hash, expr)
   end
 
   #tokenize this portion.
+  negate_next = false
   part = ['blah', 'blah', expr.lstrip]
   while true
-    part = part[2].partition(SPACE_PLUS)
+    part = part[2].partition(SPACE_PLUS_MINUS)
+    
+    if part[1] == '-'
+      negate_next = !negate_next
+    end 
+    
     if part[0].empty?
-      break
+      if part[2].empty?
+        break
+      end
+      next
     end
 
     tok = part[0]
+    
+    if tok =~ /^\d/
+      accum_offset(ret_table, parse_literal(tok, negate_next))
+      should_negate = false
+      next
+    end
+    
+    if should_negate
+      raise ParseError("Token '#{tok}' cannot be negative. Only numeric literals (hex or dec) may be negative.")
+    end
+    
     if tok =~ VALUE_RE
       ret_table[:value] = VALUES[tok.strip.downcase]
       break
-    elsif tok =~ HEX_RE || tok =~ DEC_RE
-      accum_offset(tok, ret_table)
     elsif tok =~ REGISTER_RE
       set_register(tok.strip.downcase, ret_table)
     elsif tok =~ LABEL_RE

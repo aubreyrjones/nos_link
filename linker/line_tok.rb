@@ -1,7 +1,7 @@
 require File.expand_path(File.dirname(__FILE__) + '/abstract_asm.rb')
 
 SPACE = /\s+/i
-KILL_COMMENT = /(;.*$)/
+KILL_COMMENT = /(;.*$)/i
 
 require File.expand_path(File.dirname(__FILE__) + '/param_tok.rb')
 

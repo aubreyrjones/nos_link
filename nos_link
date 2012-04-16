@@ -19,6 +19,7 @@ EOS
   opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
   opt :hacking, "Are you hacking on nos_link? You want exceptions, don't you?", :type => :boolean
   opt :base_address, "Assemble to a different base address.", :type => :integer, :default => 0
+  opt :unref_symbols, "Print a list of unreferenced symbols and stop.", :type => :boolean
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
@@ -58,7 +59,7 @@ input_files.each do |filename|
     
     this_module.parse
     instruction_stream.concat(this_module.instructions)
-    asm_mods << this_module
+    asm_mods << this_module.get_abs_module
   end
 end
 
@@ -74,13 +75,18 @@ if $config[:tree_listing]
   exit
 end
 
-assembler = Assemblinker.new(symbol_table, instruction_stream)
+assembler = Assemblinker.new(symbol_table, asm_mods)
 
 assembler.assemble
 assembler.fix
 
 if $config[:pre_bin]
-  puts instruction_stream.join("\n")
+  puts assembler.instr_list.join("\n")
+  exit
+end
+
+if $config[:unref_symbols]
+  puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"
   exit
 end
 

@@ -154,6 +154,7 @@ class Param
   # Set the reference address for the parameter
   def resolve(ref_symbol)
     @reference_symbol = ref_symbol
+    ref_symbol.referenced
   end
 
   # Get the additional word of instruction needed, or nil if none necessary.
@@ -404,12 +405,22 @@ LINKAGE_VISIBILITY = [:global, :local, :hidden]
 #
 class AsmSymbol
   attr_reader :orig_name, :def_instr, :linkage_vis, :first_file
+  
   def initialize(first_file, orig_name, parent_symbol = nil)
     @orig_name = orig_name
     @first_file = first_file
     @parent = parent_symbol
     @linkage_vis = parent_symbol.nil? ? :global : :local
     @dependent_locals = []
+    @referenced = false
+  end
+  
+  def referenced
+    @referenced = true
+  end
+  
+  def referenced?
+    @referenced
   end
 
   # Set the instruction or data word that defines this symbol.
@@ -481,7 +492,7 @@ class AsmModule
   attr_reader :name, :filename, :parse_tree, :instructions, :symbols, :functions
   
   def initialize(filename, parse_tree, instructions, symbols, functions)
-    @name = AbsSymbol::make_module_name(filename)
+    @name = AsmSymbol::make_module_name(filename)
     @filename = filename
     @parse_tree = parse_tree
     @instructions = instructions

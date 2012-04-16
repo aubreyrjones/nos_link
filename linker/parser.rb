@@ -205,9 +205,6 @@ class ObjectModule
   def parse
     new_tokenize
     definitions_pass
-    #puts @module_symbols.inspect
-    #puts @parse_tree.map {|abstract| abstract.inspect}
-    #definitions_pass()
     mangle_and_merge()
     do_main_pass()
   end
@@ -222,6 +219,10 @@ class ObjectModule
   def print_listing
     outlines = @instructions.map {|ins| ins.to_s}
     puts outlines.join("\n")
+  end
+  
+  def get_abs_module
+    AsmModule.new(@filename, @parse_tree, @instructions, @module_symbols, @functions)
   end
 end
 

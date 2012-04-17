@@ -26,6 +26,12 @@ class ParseError < Exception
   end
 end
 
+class LinkError < Exception
+  attr_accessor :msg
+  def initialize(msg)
+    @msg = msg
+  end
+end
 
 INSTRUCTIONS = Hash.new
 EXTENDED_INSTRUCTIONS = Hash.new
@@ -161,16 +167,24 @@ class Param
   def param_word
     if @reference_token
       if @reference_symbol.nil?
-        raise ParseError.new("Undefined reference to: #{@reference_token}")
+        raise LinkError.new("Undefined reference to: #{@reference_token}")
       end
       off = 0
       if @offset
         off += @offset
       end
-      return @reference_symbol.def_instr.address + off
+      full_off = @reference_symbol.def_instr.address + off
+      if full_off < 0
+        raise LinkError.new("Final encoded offset (#{@reference_token} + (#{off})) is negative.")
+      end
+      
+      return full_off
     end
 
     if @offset && needs_word?
+      if @offset < 0
+        raise LinkError.new("Final encoded offset (#{@offset.to_s}) is negative.")
+      end
       return @offset
     end
   end

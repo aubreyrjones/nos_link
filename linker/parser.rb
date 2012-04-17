@@ -11,7 +11,7 @@ unless $config
 end
 
 def parse_error_stop(e, source_file, line_number, line)
-  puts "FATAL LINK ERROR"
+  puts "FATAL PARSE ERROR"
   puts "Error: #{e.msg}"
   puts "in file #{source_file} on line #{line_number + 1}"
   puts "Errant Line: #{line}"

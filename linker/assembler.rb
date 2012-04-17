@@ -1,5 +1,15 @@
 require File.expand_path(File.dirname(__FILE__) + '/resolve.rb')
 
+
+def link_error_stop(e, filename, abs_line)
+  puts "FATAL LINK ERROR"
+  puts "Error: #{e.msg}"
+  puts "in file #{filename} on line #{abs_line[:line_number] + 1}"
+  puts "Errant Line: #{abs_line[:original_line]}"
+  puts e.backtrace if $config[:hacking]
+  exit 1 unless $DONT_STOP_ON_ERROR
+end
+
 #
 #
 # Responsible for resolving references while
@@ -53,9 +63,13 @@ class Assemblinker
   # All that's left is turning the abstract instructions into binary.
   def assemble
     instructions.each do |instr|
-      next unless instr.class == Instruction
-      resolve_param(instr, instr.a)
-      resolve_param(instr, instr.b)
+      begin
+        next unless instr.class == Instruction
+        resolve_param(instr, instr.a)
+        resolve_param(instr, instr.b)
+      rescue LinkError => e
+        link_error_stop(e, instr.source, instr.abs_line)
+      end
     end
   end
   
@@ -84,7 +98,11 @@ class Assemblinker
   # Have each instruction generate its binary code.
   def realize
     instructions.each do |instr|
-      instr.realize
+      begin
+        instr.realize
+      rescue LinkError => e
+        link_error_stop(e, instr.source, instr.abs_line)
+      end
     end
   end
 
@@ -119,8 +137,7 @@ class Assemblinker
 
     ref_sym = resolve(@symbols, instr.source, param.reference_token, instr.scope)
     if ref_sym.nil?
-      puts "Unfulfilled link error. Trying to find: #{param.reference_token}"
-      exit 1
+      raise LinkError.new("Unfulfilled link error. Trying to find: #{param.reference_token}")
     end
 
     param.resolve(ref_sym)

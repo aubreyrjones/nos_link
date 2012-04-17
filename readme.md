@@ -40,39 +40,58 @@ Labels named identically to register names (a, x, i, j...) or operand value name
 
 Any label starting with a '.' will be treated as local. They are bound to the most immediately preceeding global label. Local labels may only be referenced by instructions in the same global label scope.
 
-    :expon
-      set a, 0x42
-      set b, 0x42
-    :.local_label
-      mul a, b
-      set pc, .local_label
+```dasm16
+:expon
+  set a, 0x42
+  set b, 0x42
+:.local_label
+  mul a, b
+  set pc, .local_label
+```
+
+Instruction  Parameters
+-----------------------
+
+Instruction parameters have their own little syntax. The basic syntax is something like
+
+    offset + label + register 
+
+If it's an indirect reference, it will look like
+
+    [offset + label + register]
+
+Any of offset, label, or register may be absent. And may be in any order. The offset may be negative.
+
     
 Currently the only actively supported assembler directive is '.hidden' (which may also be spelled '.private'). The .hidden directive indicates to the linker that the given label is not available for reference from the rest of the program. Additionally, it indicates that the .hidden symbol should be preferred to global symbols of the same name for references from within the same assembly module.
 
 The syntax is:
-
-    .hidden symbol_name
-
+```dasm16
+  .hidden symbol_name
+```
 Example: 
 
-      .hidden expon
-    :expon
-      set a, 0x42
-      set b, 0x42
-    :.local_label
-      mul a, b
-      set pc, .local_label
+```dasm16
+ .hidden expon
+:expon
+  set a, 0x42
+  set b, 0x42
+:.local_label
+  mul a, b
+  set pc, .local_label
+```dasm16
 
 Data can be inlined into assembly modules either as individual words, or as text strings.
 
 Example:
-
-    :single_word_example
-      .word 0x10 ; encode the literal value 16
-      .uint16_t 0x10 ; .uint16_t is an alias for .word
-    :string_example
-      .string "This is a string."
-    :zero_terminated_string
-      .asciz "This is a zero-terminated string."
+```dasm16
+:single_word_example
+  .word 0x10 ; encode the literal value 16
+  .uint16_t 0x10 ; .uint16_t is an alias for .word
+:string_example
+  .string "This is a string."
+:zero_terminated_string
+  .asciz "This is a zero-terminated string."
+```dasm
 
 (There is currently no support for the comma-separated numeric literals style.)

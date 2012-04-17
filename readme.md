@@ -66,24 +66,27 @@ Any of offset, label, or register may be absent. And may be in any order. The of
 Currently the only actively supported assembler directive is '.hidden' (which may also be spelled '.private'). The .hidden directive indicates to the linker that the given label is not available for reference from the rest of the program. Additionally, it indicates that the .hidden symbol should be preferred to global symbols of the same name for references from within the same assembly module.
 
 The syntax is:
-```dasm16
-  .hidden symbol_name
-```
+
+
+    .hidden symbol_name
+
+
 Example: 
 
 ```dasm16
- .hidden expon
+.hidden expon
 :expon
   set a, 0x42
   set b, 0x42
 :.local_label
   mul a, b
   set pc, .local_label
-```dasm16
+```
 
 Data can be inlined into assembly modules either as individual words, or as text strings.
 
 Example:
+
 ```dasm16
 :single_word_example
   .word 0x10 ; encode the literal value 16
@@ -92,6 +95,6 @@ Example:
   .string "This is a string."
 :zero_terminated_string
   .asciz "This is a zero-terminated string."
-```dasm
+```
 
 (There is currently no support for the comma-separated numeric literals style.)

@@ -41,13 +41,15 @@ VALUES = Hash.new
 # Operational directives
 DIRECTIVES = Hash.new
 NULL_DIRS = Hash.new
+DATA_DIRECTIVES = Hash.new
   
 declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc o")
-declare(DIRECTIVES, 0x00, '.private .hidden .word .uint16_t .string .asciz .data .text .func .endfunc')
-declare(NULL_DIRS, 0x00, '.globl .global .extern .align')
+declare(DATA_DIRECTIVES, 0x00, '.short .word .uint16_t .string .asciz')
+declare(DIRECTIVES, 0x00, ".private .hidden #{DATA_DIRECTIVES.keys.join(' ')} .data .text .func .endfunc")
+declare(NULL_DIRS, 0x00, '.globl .global .extern .align .section .zero')
 
 REV_REG = {}
 REGISTERS.each_pair do |k, v|
@@ -88,7 +90,7 @@ NULL_DIR_RE = /^#{regex_keys(NULL_DIRS)}$/i
 #register
 REGISTER_RE = /^#{regex_keys(REGISTERS)}$/i
 
-
+DATA_RE = /^#{regex_keys(DATA_DIRECTIVES)}$/i
 
 class Param
   attr_accessor :offset, :reference_token, :reference_symbol, :register, :indirect, :embed_r
@@ -369,7 +371,7 @@ class InlineData
       return
     end
       
-    if @abs_line[:directive]=~ /(word)|(uint16_t)/i
+    if @abs_line[:directive]=~ /(word)|(uint16_t)|(short)/i
       literals = @abs_line[:directive_rem].gsub(/\s+/, '').split(",")
       literals.each do |lit|
         if lit =~ HEX_RE

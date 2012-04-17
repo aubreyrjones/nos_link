@@ -115,7 +115,7 @@ class Assemblinker
 
     instructions.each do |instr|
       instr_bytes = instr.words
-      encstr = 'v' * instr_bytes.size
+      encstr = 'n' * instr_bytes.size
       output << instr_bytes.pack(encstr)
     end
   end

@@ -175,7 +175,7 @@ class ObjectModule
                                 param_b)
         define_and_push(instr, pending_symbols)
         pending_symbols = []
-      elsif abs_line[:directive] =~ /(\.asciz)|(\.word)|(\.string)/i
+      elsif abs_line[:directive] =~ DATA_RE
         instr = InlineData.new(@filename, last_global_symbol, pending_symbols, abs_line)
         define_and_push(instr, pending_symbols)
         pending_symbols = []

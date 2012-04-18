@@ -240,6 +240,35 @@ class Param
   end    
 end
 
+class NullInstruction
+  attr_reader :address, :abs_line
+  attr_accessor :a, :b, :source, :scope, :defined_symbols
+  
+  def initialize
+    @abs_line = {:original_line => ';nil instruction', :directive => '.nil_instr'}
+    @source = '[none]'
+  end
+
+  # Fix this instruction to a particular address in the program.
+  def fix(address)
+    @address = address
+  end
+
+  def realize
+  end
+
+  # Get the size, in words, of the instruction.
+  def size
+    0
+  end
+
+  # Get the binary words for this instruction.
+  def words
+    []
+  end
+  
+end
+
 class Instruction
   attr_reader :address, :abs_line
   attr_accessor :opcode, :a, :b, :source, :scope, :defined_symbols
@@ -365,6 +394,9 @@ class InlineData
       str.each_byte do |byte|
         @words << byte #this is okay, just the values
       end
+      
+    # @words.map!{|w| w | 0xff00}
+      
       if @abs_line[:directive] =~ /asciz/
         @words << 0x0
       end

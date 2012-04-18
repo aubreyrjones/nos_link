@@ -19,6 +19,14 @@ class Assemblinker
   def initialize(symbols, modules)
     @symbols = symbols
     @modules = modules
+    
+    define_special_labels()
+  end
+  
+  def define_special_labels
+    @end_symbol = AsmSymbol.new("[none]", '_end', nil)
+    @end_symbol.define(NullInstruction.new)
+    @symbols[@end_symbol.name] = @end_symbol
   end
   
   def instr_list
@@ -46,7 +54,6 @@ class Assemblinker
       @mods.each do |mod|
         accum += mod.instructions.size
       end
-      return accum
     end
     
     def each
@@ -93,6 +100,7 @@ class Assemblinker
       instr.fix(assembled_address)
       assembled_address += instr.size
     end
+    @end_symbol.def_instr.fix(assembled_address)
   end
 
   # Have each instruction generate its binary code.

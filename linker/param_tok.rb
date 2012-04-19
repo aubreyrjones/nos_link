@@ -1,4 +1,4 @@
-require File.expand_path(File.dirname(__FILE__) + '/abstract_asm.rb')
+require_relative 'abstract_asm.rb'
 #indirect?
 INDIRECT_RE = /\[(.*)\]/i
 

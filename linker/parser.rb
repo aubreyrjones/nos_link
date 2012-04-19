@@ -1,7 +1,7 @@
-require 'rubygems'
-require File.expand_path(File.dirname(__FILE__) + '/resolve.rb')
-
-require File.expand_path(File.dirname(__FILE__) + '/line_tok.rb') 
+require_relative 'abstract_asm.rb'
+require_relative 'resolve.rb'
+require_relative 'line_tok.rb'
+require_relative 'param_tok.rb'
 
 $DONT_STOP_ON_ERROR = false
 

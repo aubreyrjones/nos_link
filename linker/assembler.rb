@@ -1,4 +1,4 @@
-require File.expand_path(File.dirname(__FILE__) + '/resolve.rb')
+require_relative 'resolve.rb'
 
 
 def link_error_stop(e, filename, abs_line)

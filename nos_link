@@ -1,9 +1,6 @@
 #!/usr/bin/env ruby
-
-require 'rubygems'
-require 'trollop'
 require 'yaml'
-
+require_relative './lib/trollop'
 KNOWN_LOADERS = ['naive', 'none']
 
 $config = Trollop::options do
@@ -26,10 +23,13 @@ Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
 
 
 #============LINKER=============
-require File.expand_path('../linker/parser.rb', __FILE__)
-require File.expand_path('../linker/assembler.rb', __FILE__)
-#require File.expand_path(File.dirname(__FILE__) + '/linker/parser.rb')
-#require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
+
+require_relative './linker/parser.rb'
+require_relative './linker/assembler.rb'
+
+
+# require File.expand_path(File.dirname(__FILE__) + '/linker/parser.rb')
+# require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
 
 instruction_stream = []
 symbol_table = {}

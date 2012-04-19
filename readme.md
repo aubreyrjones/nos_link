@@ -8,25 +8,24 @@ It accepts Notch-style assembly code. You may specify as many assembly files as 
 
 Prerequisites
 -------------
-You'll need ruby. I'm using 1.8; but, it should work with 1.9 as well.
-
-You'll also need the 'trollop' rubygem. I use it for command-line arguments processing. This is the only ruby dependency.
+You'll need Ruby 1.9+. Or jRuby 1.6+. They should operate identically, but the startup time on jRuby is three times longer. [Ruby 1.8 used to be supported, but there are several significant improvements in 1.9.]
 
 If you're running apt-based linux, here is the basic recipe to get up to speed. This may not be the ideal way to install this stuff, but it's the easiest. rpm- or source-based distros will use basically the same approach.
 
-    > sudo apt-get install ruby rubygems
-    > sudo gem install trollop
+    > sudo apt-get install ruby1.9
 
-On windows, I'm not entirely sure what to do. But, you need to install ruby from http://www.ruby-lang.org and rubygems from http://rubygems.org. Then you tell rubygems to install 'trollop', and you should be good to go.
+On windows, I'm not entirely sure what to do. But, you need to install ruby from http://www.ruby-lang.org.
 
-On osx... I have no idea.
+On osx... you have ruby 1.8 as the default. I'm not sure what you need to do. Soon, nos will be available as an entire development environment and will ship with jRuby.
 
 Usage
 -----
 
-    nos_link -o output_binary assembly_module [space separated list of additional modules]
+    nos_link assembly_module [space separated list of additional modules]
 
-Try --help for more options.
+The default output file is 'out.dcpu16' in the current directory. If you want something else, the '-o' command line switch will allow you to specify any name you like.
+
+Try --help for more information and options.
 
 
 Assembler Syntax and Directives

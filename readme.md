@@ -95,7 +95,7 @@ Example:
 :zero_terminated_string
   .asciz "This is a zero-terminated string."
 :comma_sep_style
-  .word 0x10, 16
+  .byte 0x10, 16
 :address_of_string
   .word string_example
 ```

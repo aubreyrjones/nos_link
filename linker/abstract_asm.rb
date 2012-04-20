@@ -47,7 +47,7 @@ declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn if
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(REGISTERS, 0, "a b c x y z i j h")
 declare(VALUES, 0x18, "pop peek push sp pc o")
-declare(DATA_DIRECTIVES, 0x00, '.short .word .uint16_t .string .asciz')
+declare(DATA_DIRECTIVES, 0x00, '.byte .short .word .uint16_t .string .asciz')
 declare(DIRECTIVES, 0x00, ".private .hidden #{DATA_DIRECTIVES.keys.join(' ')} .data .text .func .endfunc")
 declare(NULL_DIRS, 0x00, '.globl .global .extern .align .section .zero')
 
@@ -413,7 +413,7 @@ class InlineData
       return
     end
       
-    if @abs_line[:directive]=~ /(word)|(uint16_t)|(short)/i
+    if @abs_line[:directive]=~ /(byte)|(word)|(uint16_t)|(short)/i
       literals = @abs_line[:directive_rem].gsub(/\s+/, '').split(",")
       literals.each do |lit|
         if lit.nil?

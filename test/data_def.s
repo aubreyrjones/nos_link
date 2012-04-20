@@ -9,7 +9,7 @@
 	.word 10
 	.word 10
 :comma_data
-  .word 0x10, 16, _end
+  .byte 0x10, 16, _end
 :reference
 	set a, [global_dec]
 	set a, [global_dec+1]

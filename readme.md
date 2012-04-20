@@ -82,7 +82,7 @@ Example:
   set pc, .local_label
 ```
 
-Data can be inlined into assembly modules either as individual words, or as text strings.
+Data can be inlined into assembly modules either as individual words, or as text strings. Data directives may reference labels to get their values, but may not perform arithmetic on them at this time.
 
 Example:
 
@@ -94,6 +94,8 @@ Example:
   .string "This is a string."
 :zero_terminated_string
   .asciz "This is a zero-terminated string."
+:comma_sep_style
+  .word 0x10, 16
+:address_of_string
+  .word string_example
 ```
-
-(There is currently no support for the comma-separated numeric literals style.)

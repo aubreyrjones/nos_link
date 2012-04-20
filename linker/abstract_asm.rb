@@ -244,8 +244,9 @@ class NullInstruction
   attr_reader :address, :abs_line
   attr_accessor :a, :b, :source, :scope, :defined_symbols
   
-  def initialize
+  def initialize(defined_symbols)
     @abs_line = {:original_line => ';nil instruction', :directive => '.nil_instr'}
+    @defined_symbols = defined_symbols
     @source = '[none]'
   end
 
@@ -265,6 +266,13 @@ class NullInstruction
   # Get the binary words for this instruction.
   def words
     []
+  end
+  
+  def to_s
+    labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
+    labels << "\n" unless labels.empty?
+    addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
+    return "#{labels}\t; null_instruction #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
   end
   
 end
@@ -369,10 +377,10 @@ end
 # Inline data definition
 class InlineData
   attr_reader :words
-  attr_reader :address
-  attr_accessor :source, :scope, :defined_symbols
+  attr_reader :address, :symbol_reference
+  attr_accessor :source, :scope, :defined_symbols, :abs_line
 
-  def initialize(source_file, global_scope, labels, abstract_line)
+  def initialize(source_file, global_scope, labels, abstract_line = nil)
     @abs_line = abstract_line
     @scope = global_scope
     @source = source_file
@@ -381,7 +389,9 @@ class InlineData
 
     @words = []
 
-    parse_data
+    if abstract_line
+      parse_data
+    end
   end
 
   def line
@@ -406,11 +416,16 @@ class InlineData
     if @abs_line[:directive]=~ /(word)|(uint16_t)|(short)/i
       literals = @abs_line[:directive_rem].gsub(/\s+/, '').split(",")
       literals.each do |lit|
+        if lit.nil?
+          puts "BAD"
+        end
         if lit =~ HEX_RE
           @words << $1.to_i(16)
         elsif lit =~ DEC_RE   
           @words << $1.to_i(10)
-        end 
+        elsif lit =~ LABEL_RE
+          @words << lit
+        end
       end
     end
   end
@@ -423,18 +438,39 @@ class InlineData
   # Build the binary representation of the entire instruction,
   # including any additional words.
   def realize
-    #nop
+    @words.map! do |word|
+      if word.is_a? AsmSymbol
+        if word.def_instr.address.nil?
+          raise LinkError.new("Cannot find address of #{word.name}")
+        end
+        word.def_instr.address
+      else
+        word
+      end
+    end
   end
 
   def size
     return @words.size
   end
 
+  def words_to_s_map
+    @words.map do |word|
+      if word.is_a? String
+        "\t.word #{word}"
+      elsif word.is_a? AsmSymbol
+        "\t.word #{word.name}"
+      elsif word.is_a? Numeric
+        "\t.word 0x#{word.to_s(16)}"
+      end
+    end
+  end
+
   def to_s
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    words = @words.map{|w| "\t.word 0x#{w.to_s(16)}"}
+    words = words_to_s_map
     if words.size > 0
       words[0] << addr_line
     end

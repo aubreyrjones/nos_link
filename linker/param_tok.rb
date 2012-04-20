@@ -47,7 +47,7 @@ def accum_offset(ret_table, value)
 end
 
 # Parse the parameter expression.
-def parse_param_expr(instr_hash, expr)
+def parse_param_expr(expr)
   ret_table = Hash.new
   if expr =~ INDIRECT_RE
     expr = $1

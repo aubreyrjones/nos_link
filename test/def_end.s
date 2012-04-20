@@ -1,7 +1,8 @@
 :in_the_beginning
 	set a, _end
 	set pc, in_the_beginning
-	
+
+	.word _end
 	.word 1
 	.word 2
 	.word 3

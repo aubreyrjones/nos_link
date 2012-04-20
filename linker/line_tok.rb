@@ -15,12 +15,12 @@ def parse_instruction_line(ret_table, instr_tok, line_rem)
   
   if param_toks.size > 0
     ret_table[:a_token] = param_toks[0]
-    ret_table[:param_a] = parse_param_expr(ret_table, param_toks[0]) 
+    ret_table[:param_a] = parse_param_expr(param_toks[0]) 
   end
   
   if param_toks.size > 1
     ret_table[:b_token] = param_toks[1]
-    ret_table[:param_b] = parse_param_expr(ret_table, param_toks[1])
+    ret_table[:param_b] = parse_param_expr(param_toks[1])
   end
 end
 

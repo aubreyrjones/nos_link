@@ -19,13 +19,15 @@ class Assemblinker
   def initialize(symbols, modules)
     @symbols = symbols
     @modules = modules
+    @leading_instructions = []
+    @trailing_instructions = []
     
     define_special_labels()
   end
   
   def define_special_labels
     @end_symbol = AsmSymbol.new("[none]", '_end', nil)
-    @end_symbol.define(NullInstruction.new)
+    @end_symbol.define(NullInstruction.new([@end_symbol]))
     @symbols[@end_symbol.name] = @end_symbol
   end
   
@@ -39,14 +41,16 @@ class Assemblinker
   
   def instructions
     if @iter.nil?
-      @iter = InstrIter.new(@modules)
+      @iter = InstrIter.new(@modules, @leading_instructions, @trailing_instructions)
     end
     return @iter
   end
   
   class InstrIter
-    def initialize(mods)
+    def initialize(mods, leading, trailing)
+      @leading = leading
       @mods = mods
+      @trailing = trailing
     end
     
     def size
@@ -57,10 +61,34 @@ class Assemblinker
     end
     
     def each
+      
+      @leading.each do |instr|
+          yield instr
+      end
+      
       @mods.each do |mod|
         mod.instructions.each do |instr|
           yield instr
         end
+      end
+      
+      @trailing.each do |instr|
+          yield instr
+      end
+    end
+  end
+
+  def resolve_data_label_refs(instr) 
+    instr.words.map! do |word|
+      if word.class != String
+        word
+      else
+        ref_sym = resolve(@symbols, instr.source, word, instr.scope)
+        ref_sym.referenced
+        if ref_sym.nil?
+          raise LinkError.new("Unfulfilled link error. Trying to find: #{word}")
+        end
+        ref_sym
       end
     end
   end
@@ -71,12 +99,22 @@ class Assemblinker
   def assemble
     instructions.each do |instr|
       begin
+        
+        if instr.class == InlineData
+          resolve_data_label_refs(instr)
+          next
+        end
+        
         next unless instr.class == Instruction
         resolve_param(instr, instr.a)
         resolve_param(instr, instr.b)
       rescue LinkError => e
         link_error_stop(e, instr.source, instr.abs_line)
       end
+    end
+    
+    if @end_symbol.referenced?
+      @trailing_instructions << @end_symbol.def_instr
     end
   end
   
@@ -100,7 +138,9 @@ class Assemblinker
       instr.fix(assembled_address)
       assembled_address += instr.size
     end
-    @end_symbol.def_instr.fix(assembled_address)
+#    if @end_symbol.referenced?
+#      @end_symbol.def_instr.words << assembled_address
+#    end
   end
 
   # Have each instruction generate its binary code.

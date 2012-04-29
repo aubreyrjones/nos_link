@@ -26,6 +26,14 @@ class ParseError < Exception
   end
 end
 
+class EvalError < Exception
+  attr_accessor :msg
+  def initialize(msg)
+    @msg = msg
+  end
+end
+
+
 class LinkError < Exception
   attr_accessor :msg
   def initialize(msg)
@@ -49,7 +57,7 @@ declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
 declare(EXTENDED_INSTRUCTIONS, 0x07, "hcf int iag ias")
 declare(EXTENDED_INSTRUCTIONS, 0x10, "hwn hwq")
 declare(REGISTERS, 0, "a b c x y z i j")
-declare(VALUES, 0x18, "push peek pick push sp pc o")
+declare(VALUES, 0x18, "push peek pick sp pc ex")
 declare(DATA_DIRECTIVES, 0x00, '.byte .short .word .uint16_t .string .asciz')
 declare(DIRECTIVES, 0x00, ".private .hidden #{DATA_DIRECTIVES.keys.join(' ')} .data .text .func .endfunc")
 declare(NULL_DIRS, 0x00, '.globl .global .extern .align .section .zero')
@@ -96,151 +104,174 @@ REGISTER_RE = /^#{regex_keys(REGISTERS)}$/i
 DATA_RE = /^#{regex_keys(DATA_DIRECTIVES)}$/i
 
 class Param
-  attr_accessor :offset, :reference_token, :reference_symbol, :register, :indirect, :embed_r
+  attr_reader :parse_tree, :mode_bits, :param_word
 
-  def initialize(parse_table)
-    @offset = parse_table[:offset]
-    @reference_token = parse_table[:reference]
-    @register = parse_table[:register]
-    @indirect = parse_table[:indirect]
-    @value = parse_table[:value]
-    @embed_r = parse_table[:embed_r]
-    
-    @reference_symbol = nil
+  def initialize(parse_tree, position)
+    @position = position
+    @parse_tree = parse_tree
   end
-
+  
+  def indirect?
+    @parse_tree[:indirect]
+  end
+  
+  def each_term(start_instr = nil)
+    cur_expr = start_instr | @parse_tree
+    while true
+      if cur_expr[:term]
+        yield term
+      end
+      if cur_expr[:rhs]
+        cur_expr = cur_expr[:rhs]
+      else
+        break
+      end
+    end
+  end
+  
+  def is?(term, type_sym)
+    return term[:type] == type_sym
+  end
+  
+  def has_type?(type_sym)
+    each_term do |term|
+      if is?(term, type_sym)
+        return true
+      end
+    end
+    
+    false
+  end
+ 
   # Get a reconstructed textual representation of this parameter,
   # without indirection brackets.
   def expr_to_s
-    if @value
-      return REV_VALS[@value]
-    end
-
-    buf = []
-
-    if @offset 
-      buf << "#{@offset < 0 ? '-' : ''}0x#{@offset.abs.to_s(16)}"
-    end
-
-    if @reference_token
-      if @reference_symbol && @reference_symbol.def_instr.address
-        buf << "0x#{@reference_symbol.def_instr.address.to_s(16)}"
-      else
-        buf << reference_token
+    buf = ''
+    each_term do |term|
+      if term[:operator]
+        buf << term[:operator]
       end
+      buf << term[:token]
     end
-
-    if @register
-      buf << REV_REG[@register]
-    end
-
-    return buf.join("+")
+    buf
   end
 
   # Get a reconstructed textual rep of this parameter.
   def to_s
-    template = @indirect ? "[%s]" : "%s"
+    template = indirect? ? "[%s]" : "%s"
     return template % expr_to_s
   end
 
   # Does this parameter demand an additional word in the instruction?
+  # Right now, short form is unsupported.
   def needs_word?
-    if @value
-      return false
-    end
-
-    if @reference_token
-      return true
-    end
-        
-    if @register && @offset
+    if has_type? :reference
       return true
     end
     
-    if @offset && @offset > 0x1f
+    if has_type? :literal
       return true
     end
-  end
-
-  # Set the reference address for the parameter
-  def resolve(ref_symbol)
-    @reference_symbol = ref_symbol
-    ref_symbol.referenced
-  end
-
-  # Get the additional word of instruction needed, or nil if none necessary.
-  def param_word
-    if @reference_token
-      if @reference_symbol.nil?
-        raise LinkError.new("Undefined reference to: #{@reference_token}")
-      end
-      off = 0
-      if @offset
-        off += @offset
-      end
-      full_off = @reference_symbol.def_instr.address + off
-      if full_off < 0
-        raise LinkError.new("Final encoded offset (#{@reference_token} + (#{off})) is negative.")
-      end
-      
-      return full_off
-    end
-
-    if @offset && needs_word?
-      if @offset < 0
-        raise LinkError.new("Final encoded offset (#{@offset.to_s}) is negative.")
-      end
-      return @offset
-    end
+    
+    #otherwise it is only a register or raw special value
+    return false
   end
   
-  # Get the addressing mode bits. These are the 'a' or 'b' in the dcpu16 instruction.
-  def mode_bits
-    if @value
-      return @value
-    end
-    
-    #     register cases:
-    #    0x00-0x07: register (A, B, C, X, Y, Z, I or J, in that order)
-    #    0x08-0x0f: [register]
-    #    0x10-0x17: [next word + register]
-    if @register
-      if !@indirect
-        return @register #only literal register value
+  def rec_eval(scope, term, state)
+    if is?(term, :register) || is?(term, :special)
+      unless state[:register].nil? && state[:special].nil?
+        raise EvalError.new("Only one register or special value may be referenced per expression.")
       end
       
-      if @offset || @reference_token #resove a label, or use a large offset
-        return @register + INDIRECT_REG_NEXT_OFFSET 
-      else
-        return @register + INDIRECT_REG_OFFSET
+      unless state[:accum].nil? || !term[:rhs].nil?
+        raise EvalError.new("Registers and special values may only appear as left- or right-most term of an expression.")
       end
-    end
-    
-    #     reference cases, with no register
-    #    0x1e: [next word]
-    #    0x1f: next word (literal)
-    if @reference_token #we have a reference, so we'll push a word regardless
-      if @indirect
-        return INDIRECT_NEXT
+      
+      if is?(term, :register)
+        state[:register] = REGISTERS[term[:token]]
+        state[:reg_tok] = term[:token]
       else
-        return LITERAL_NEXT
+        state[:special] = VALUES[term[:token]]
+        state[:special_tok] = term[:token]
+      end
+    elsif is?(term, :literal) || is?(term, :reference)
+      state[:accum] = 0 if state[:accum].nil?
+      loc_value = 0
+      
+      if is?(term, literal)
+        loc_value = term[:value]
+      else
+        loc_value = scope.ref(term[:token]).def_instr.address
+      end
+        
+      if term[:operator] && term[:operator] == '-'
+        state[:accum] -= loc_value
+      else
+        state[:accum] += loc_value
       end
     end
 
-    if @offset
-      if @offset >=0 && @offset <= 0x1f && !@indirect
-        return @offset + SHORT_LITERAL_OFFSET
-      end
-      
-      if @indirect
-        return INDIRECT_NEXT
+    if term[:rhs]
+      rec_eval(scope, term[:rhs], state)
+    end
+
+    return state
+  end
+
+  def evaluate(scope)
+    state = {}
+    rec_eval(scope, @parse_tree, state)
+    
+    if state[:register]
+      if state[:accum]
+        raise EvalError.new("There is no 'register+next' direct adressing mode.") unless indirect?
+        state[:mode] = state[:register] + INDIRECT_REG_NEXT_OFFSET
+        state[:offset] = state[:accum]
+      elsif indirect?
+        state[:mode] = state[:register] + INDIRECT_REG_OFFSET
       else
-        return LITERAL_NEXT
+        state[:mode] = state[:register]
       end
+    elsif state[:special]
+      evaluate_special_state(state)
+    elsif state[:accum]
+      state[:mode] = indirect? ? INDIRECT_NEXT : LITERAL_NEXT
+      state[:offset] = state[:accum]
     end
     
-    raise ParseError.new("Cannot build mode bits.");
-  end    
+    @mode_bits = state[:mode]
+    @param_word = state[:offset]
+    
+    state
+  end
+  
+  def evaluate_special_state(state)
+    case state[:special_tok]
+    when 'pop'
+    when 'push'
+      raise EvalError.new("pop and push cannot be indirect.") if indirect?
+      raise EvalError.new("pop and push do not accept offsets.") if state[:accum]
+      if (state[:special_tok] == 'pop' && @position != 1) || (state[:special_tok] == 'push' && @position != 0)
+        raise EvalError.new("pop or push used in wrong position.")
+      end
+      state[:mode] = VALUES('push')
+    when 'sp'
+      if state[:accum] && indirect?
+        state[:mode] = VALUES('pick')
+        state[:offset] = state[:accum]
+      elsif indirect?
+        state[:mode] = VALUES('peek')
+      else
+        state[:mode] = VALUES('sp')
+      end
+    when 'pc'
+      raise EvalError.new("Only direct addressing with no offset is supported for pc.") if (indirect? || state[:accum])
+      state[:mode] = VALUES('pc')
+    when 'ex'
+      raise EvalError.new("Only direct addressing with no offset is supported for ex.") if (indirect? || state[:accum])
+      state[:mode] = VALUES('ex')
+    end
+  end
 end
 
 class NullInstruction
@@ -259,6 +290,7 @@ class NullInstruction
   end
 
   def realize
+    
   end
 
   # Get the size, in words, of the instruction.
@@ -282,42 +314,18 @@ end
 
 class Instruction
   attr_reader :address, :abs_line
-  attr_accessor :opcode, :a, :b, :source, :scope, :defined_symbols
+  attr_accessor :source, :scope, :defined_symbols, :params
   
-  def initialize(source_file, global_scope, labels, parsed_line, param_a, param_b)
+  def initialize(source_file, global_scope, labels, parsed_line)
     @abs_line = parsed_line
     @source = source_file
     @scope = global_scope
     @defined_symbols = labels
-    
-    @opcode_token = @abs_line[:instr]
-    @a = param_a
-    @b = param_b
-    
-    @module = AsmSymbol::make_module_name(source_file)
-    @extended = false
-    
-    @op = INSTRUCTIONS[@opcode_token]
-    @size = 1
-
-    if @op.nil?
-      @op = EXTENDED_INSTRUCTIONS[@opcode_token]
-      if @op.nil?
-        puts "Unknown instruction: #{@opcode_token}"
-        exit 1
-      end
-      @extended = true
+    @params = []
+    parsed_line[:params].each_with_index do |p, i|
+      @params << Param.new(p, i)
     end
-
-    if @a.needs_word?
-      @size += 1
-    end
-    
-    unless @extended
-      if @b.needs_word?
-        @size += 1
-      end
-    end
+    @module = AsmSymbol::make_module_name(source_file)    
   end
   
   def line
@@ -329,43 +337,21 @@ class Instruction
     @address = address
   end
 
-  # Build the binary representation of the entire instruction,
-  # including any additional words.
-  def realize
-    @words = [opcode]
-    if @a.needs_word?
-      p_word = @a.param_word
-      if p_word > 0xffff
-        raise ParseError.new("Word greater than 0xfff.")
-      end
-      @words << p_word
-    end
-
-    if @b && @b.needs_word?
-      p_word = @b.param_word
-      if p_word > 0xffff
-        raise ParseError.new("Word greater than 0xfff.")
-      end
-      @words << p_word
+  # Evaluate the parameters with the given scope.
+  def realize(scope)
+    @params.each do |p|
+      p.evaluate(scope)
     end
   end
-
-  # Get the size, in words, of the instruction.
+  
+   # Get the size, in words, of the instruction.
   def size
-    @size
+    puts "this should be subclassed."
   end
 
   # Get the binary words for this instruction.
   def words
-    @words
-  end
-
-  # Get the opcode for this instruction.
-  def opcode
-    if @extended
-      return 0x00 | (@op << 5) | (@a.mode_bits << 10)
-    end
-    return @op | (@a.mode_bits << 10) | (@b.mode_bits << 5)
+    puts "this should be subclassed"
   end
 
   # Reconstruct a string rep of this instruction.
@@ -375,6 +361,60 @@ class Instruction
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
     return "#{labels}\t#{@opcode_token} #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
   end
+end
+
+class Op < Instruction
+  def initialize(source_file, global_scope, labels, parsed_line)
+    super(source_file, global_scope, labels, parsed_line)
+    @instr_token = @abs_line[:instr]
+    @op = INSTRUCTIONS[@instr_token]
+
+    if @op.nil?
+      @op = EXTENDED_INSTRUCTIONS[@opcode_token]
+      if @op.nil?
+        puts "Unknown instruction: #{@opcode_token}"
+        exit 1
+      end
+      @extended = true
+    end
+  end
+  
+  # Get the size, in words, of the instruction.
+  def size
+    1 + params_size
+  end
+ 
+ # Get how many words of parameters are needed
+  def params_size
+    accum = 0
+    @params.each do |p|
+      accum += 1 if p.needs_word?
+    end
+    accum
+  end
+
+  # Get the binary words for this instruction.
+  def words
+    [opcode].concat(@params.map{|p| p.param_word})
+  end
+
+  # Get the opcode for this instruction.
+  def opcode
+    if @extended
+      return 0x00 | (@op << 5) | (@params[0].mode_bits << 10)
+    else
+      return @op | (@params[1].mode_bits << 10) | (@params[0].mode_bits << 5)
+    end
+  end
+ 
+    # Reconstruct a string rep of this instruction.
+  def to_s
+    labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
+    labels << "\n" unless labels.empty?
+    addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
+    return "#{labels}\t#{@opcode_token} #{@a.to_s}#{@b ? ',' : ''} #{@b.to_s}#{addr_line}"
+  end
+
 end
 
 # Inline data definition

@@ -1,7 +1,6 @@
 require_relative 'abstract_asm.rb'
 require_relative 'resolve.rb'
 require_relative 'line_tok.rb'
-require_relative 'param_tok.rb'
 
 $DONT_STOP_ON_ERROR = false
 
@@ -227,6 +226,7 @@ class ObjectModule
 end
 
 if __FILE__ == $PROGRAM_NAME
+  require 'yaml'
   filename = "#{ARGV.first || "out.s"}"
   om = nil
   open(filename, 'r') do |file|
@@ -234,7 +234,8 @@ if __FILE__ == $PROGRAM_NAME
   end
   
   unless om.nil?
-    om.parse
+    om.new_tokenize
+    puts om.print_abstract.to_yaml
     # om.print_listing
   end
 end

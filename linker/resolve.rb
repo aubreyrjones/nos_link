@@ -30,3 +30,17 @@ def resolve(symbol_table, filename, symbol_name, current_global = nil)
   end
 end
 
+class Scope
+  attr_accessor :symbol_table, :filename, :symbol_name, :current_global
+  
+  def initialize(table, file, symbol, global)
+    symbol_table = table
+    filename = file
+    symbol_name = symbol
+    current_global = global
+  end
+  
+  def ref(reference)
+    resolve(symbol_table,filename,symbol_name,current_global)
+  end
+end

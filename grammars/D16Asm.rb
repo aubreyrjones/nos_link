@@ -129,7 +129,7 @@ module D16Asm
   module IndirectOrDirect3
 			def content
 				retval = elements[1].content
-				retval[:indirect] = true unless elements[0].empty?
+				retval[:indirect] = !elements[0].empty?
 				retval
 			end
   end
@@ -357,9 +357,11 @@ module D16Asm
 
   module Expression1
 			def content
-				retval = {:lhs => elements[0].content}
+				retval = {:term => elements[0].content}
 				if elements.length > 1 && elements[1].respond_to?('content')
-					retval[:rhs] = elements[1].content
+					sub_expr = elements[1].content 
+					retval[:rhs] = sub_expr[:expr]
+					retval[:rhs][:operator] = sub_expr[:operator]
 				end
 				retval
 			end
@@ -816,7 +818,7 @@ module D16Asm
 				if text_value.start_with? '-'
 					sign = -1
 				end
-				{:type => :literal, :value => elements[1].value * sign}
+				{:type => :literal, :token => text_value, :value => elements[1].value * sign}
 			end
   end
 
@@ -954,7 +956,7 @@ module D16Asm
 
   module Register1
 			def content
-				{:type => :register, :token => text_value}
+				{:type => :register, :token => text_value.downcase}
 			end
   end
 
@@ -1012,7 +1014,7 @@ module D16Asm
 
   module SpecialValue1
 			def content
-				{:type => :special, :token => text_value}
+				{:type => :special, :token => text_value.downcase}
 			end
   end
 

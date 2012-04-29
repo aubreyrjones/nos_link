@@ -1,3 +1,5 @@
+require 'yaml'
+
 require 'polyglot'
 require 'treetop'
 
@@ -7,4 +9,8 @@ $parser = D16AsmParser.new
 
 def parse(str)
 	$parser.parse str
+end
+
+def yp(str)
+	puts YAML.dump(parse(str).content)
 end

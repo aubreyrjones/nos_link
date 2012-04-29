@@ -9,16 +9,24 @@ module D16Asm
   end
 
   module Parameters0
-    def expression
-      elements[1]
-    end
   end
 
   module Parameters1
-    def expression
+    def indirect_or_direct
       elements[0]
     end
 
+  end
+
+  module Parameters2
+			def content
+				retval = []
+				retval << elements[0].content
+				if elements[1] && !elements[1].empty?
+					retval.concat(elements[1].elements.map {|e| e.content})
+				end
+				retval
+			end
   end
 
   def _nt_parameters
@@ -33,29 +41,289 @@ module D16Asm
     end
 
     i0, s0 = index, []
-    r1 = _nt_expression
+    r1 = _nt_indirect_or_direct
     s0 << r1
     if r1
       s2, i2 = [], index
       loop do
-        i3, s3 = index, []
-        if has_terminal?(',', false, index)
-          r4 = instantiate_node(SyntaxNode,input, index...(index + 1))
+        r3 = _nt_additional_param
+        if r3
+          s2 << r3
+        else
+          break
+        end
+      end
+      r2 = instantiate_node(SyntaxNode,input, i2...index, s2)
+      s0 << r2
+      if r2
+        i5, s5 = index, []
+        if has_terminal?(';', false, index)
+          r6 = instantiate_node(SyntaxNode,input, index...(index + 1))
           @index += 1
         else
-          terminal_parse_failure(',')
-          r4 = nil
+          terminal_parse_failure(';')
+          r6 = nil
         end
-        s3 << r4
-        if r4
-          r5 = _nt_expression
-          s3 << r5
+        s5 << r6
+        if r6
+          s7, i7 = [], index
+          loop do
+            if index < input_length
+              r8 = instantiate_node(SyntaxNode,input, index...(index + 1))
+              @index += 1
+            else
+              terminal_parse_failure("any character")
+              r8 = nil
+            end
+            if r8
+              s7 << r8
+            else
+              break
+            end
+          end
+          r7 = instantiate_node(SyntaxNode,input, i7...index, s7)
+          s5 << r7
         end
-        if s3.last
-          r3 = instantiate_node(SyntaxNode,input, i3...index, s3)
-          r3.extend(Parameters0)
+        if s5.last
+          r5 = instantiate_node(SyntaxNode,input, i5...index, s5)
+          r5.extend(Parameters0)
         else
-          @index = i3
+          @index = i5
+          r5 = nil
+        end
+        if r5
+          r4 = r5
+        else
+          r4 = instantiate_node(SyntaxNode,input, index...index)
+        end
+        s0 << r4
+      end
+    end
+    if s0.last
+      r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
+      r0.extend(Parameters1)
+      r0.extend(Parameters2)
+    else
+      @index = i0
+      r0 = nil
+    end
+
+    node_cache[:parameters][start_index] = r0
+
+    r0
+  end
+
+  module IndirectOrDirect0
+  end
+
+  module IndirectOrDirect1
+  end
+
+  module IndirectOrDirect2
+    def expression
+      elements[1]
+    end
+
+  end
+
+  module IndirectOrDirect3
+			def content
+				retval = elements[1].content
+				retval[:indirect] = true unless elements[0].empty?
+				retval
+			end
+  end
+
+  def _nt_indirect_or_direct
+    start_index = index
+    if node_cache[:indirect_or_direct].has_key?(index)
+      cached = node_cache[:indirect_or_direct][index]
+      if cached
+        cached = SyntaxNode.new(input, index...(index + 1)) if cached == true
+        @index = cached.interval.end
+      end
+      return cached
+    end
+
+    i0, s0 = index, []
+    i2, s2 = index, []
+    if has_terminal?('[', false, index)
+      r3 = instantiate_node(SyntaxNode,input, index...(index + 1))
+      @index += 1
+    else
+      terminal_parse_failure('[')
+      r3 = nil
+    end
+    s2 << r3
+    if r3
+      s4, i4 = [], index
+      loop do
+        if has_terminal?('\G[ \\t]', true, index)
+          r5 = true
+          @index += 1
+        else
+          r5 = nil
+        end
+        if r5
+          s4 << r5
+        else
+          break
+        end
+      end
+      r4 = instantiate_node(SyntaxNode,input, i4...index, s4)
+      s2 << r4
+    end
+    if s2.last
+      r2 = instantiate_node(SyntaxNode,input, i2...index, s2)
+      r2.extend(IndirectOrDirect0)
+    else
+      @index = i2
+      r2 = nil
+    end
+    if r2
+      r1 = r2
+    else
+      r1 = instantiate_node(SyntaxNode,input, index...index)
+    end
+    s0 << r1
+    if r1
+      r6 = _nt_expression
+      s0 << r6
+      if r6
+        i8, s8 = index, []
+        s9, i9 = [], index
+        loop do
+          if has_terminal?('\G[ \\t]', true, index)
+            r10 = true
+            @index += 1
+          else
+            r10 = nil
+          end
+          if r10
+            s9 << r10
+          else
+            break
+          end
+        end
+        r9 = instantiate_node(SyntaxNode,input, i9...index, s9)
+        s8 << r9
+        if r9
+          if has_terminal?(']', false, index)
+            r11 = instantiate_node(SyntaxNode,input, index...(index + 1))
+            @index += 1
+          else
+            terminal_parse_failure(']')
+            r11 = nil
+          end
+          s8 << r11
+        end
+        if s8.last
+          r8 = instantiate_node(SyntaxNode,input, i8...index, s8)
+          r8.extend(IndirectOrDirect1)
+        else
+          @index = i8
+          r8 = nil
+        end
+        if r8
+          r7 = r8
+        else
+          r7 = instantiate_node(SyntaxNode,input, index...index)
+        end
+        s0 << r7
+      end
+    end
+    if s0.last
+      r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
+      r0.extend(IndirectOrDirect2)
+      r0.extend(IndirectOrDirect3)
+    else
+      @index = i0
+      r0 = nil
+    end
+
+    node_cache[:indirect_or_direct][start_index] = r0
+
+    r0
+  end
+
+  module AdditionalParam0
+    def comma
+      elements[0]
+    end
+
+    def indirect_or_direct
+      elements[1]
+    end
+  end
+
+  module AdditionalParam1
+			def content
+				elements[1].content
+			end
+  end
+
+  def _nt_additional_param
+    start_index = index
+    if node_cache[:additional_param].has_key?(index)
+      cached = node_cache[:additional_param][index]
+      if cached
+        cached = SyntaxNode.new(input, index...(index + 1)) if cached == true
+        @index = cached.interval.end
+      end
+      return cached
+    end
+
+    i0, s0 = index, []
+    r1 = _nt_comma
+    s0 << r1
+    if r1
+      r2 = _nt_indirect_or_direct
+      s0 << r2
+    end
+    if s0.last
+      r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
+      r0.extend(AdditionalParam0)
+      r0.extend(AdditionalParam1)
+    else
+      @index = i0
+      r0 = nil
+    end
+
+    node_cache[:additional_param][start_index] = r0
+
+    r0
+  end
+
+  module Comma0
+  end
+
+  def _nt_comma
+    start_index = index
+    if node_cache[:comma].has_key?(index)
+      cached = node_cache[:comma][index]
+      if cached
+        cached = SyntaxNode.new(input, index...(index + 1)) if cached == true
+        @index = cached.interval.end
+      end
+      return cached
+    end
+
+    i0, s0 = index, []
+    if has_terminal?(',', false, index)
+      r1 = instantiate_node(SyntaxNode,input, index...(index + 1))
+      @index += 1
+    else
+      terminal_parse_failure(',')
+      r1 = nil
+    end
+    s0 << r1
+    if r1
+      s2, i2 = [], index
+      loop do
+        if has_terminal?('\G[ \\t]', true, index)
+          r3 = true
+          @index += 1
+        else
           r3 = nil
         end
         if r3
@@ -69,13 +337,13 @@ module D16Asm
     end
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
-      r0.extend(Parameters1)
+      r0.extend(Comma0)
     else
       @index = i0
       r0 = nil
     end
 
-    node_cache[:parameters][start_index] = r0
+    node_cache[:comma][start_index] = r0
 
     r0
   end
@@ -85,6 +353,16 @@ module D16Asm
       elements[0]
     end
 
+  end
+
+  module Expression1
+			def content
+				retval = {:lhs => elements[0].content}
+				if elements.length > 1 && elements[1].respond_to?('content')
+					retval[:rhs] = elements[1].content
+				end
+				retval
+			end
   end
 
   def _nt_expression
@@ -125,6 +403,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Expression0)
+      r0.extend(Expression1)
     else
       @index = i0
       r0 = nil
@@ -143,6 +422,13 @@ module D16Asm
     def expression
       elements[1]
     end
+  end
+
+  module Additive1
+			def content
+				{:operator => '+',
+				 :expr => elements[1].content}
+			end
   end
 
   def _nt_additive
@@ -166,6 +452,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Additive0)
+      r0.extend(Additive1)
     else
       @index = i0
       r0 = nil
@@ -184,6 +471,13 @@ module D16Asm
     def expression
       elements[1]
     end
+  end
+
+  module Subtractive1
+			def content
+				{:operator => '-',
+				 :expr => elements[1].content}
+			end
   end
 
   def _nt_subtractive
@@ -207,6 +501,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Subtractive0)
+      r0.extend(Subtractive1)
     else
       @index = i0
       r0 = nil
@@ -326,30 +621,12 @@ module D16Asm
   end
 
   module Term0
-			def term_type
-				:register
-			end
   end
 
   module Term1
-			def term_type
-				:special
+			def content
+				elements[0].content
 			end
-  end
-
-  module Term2
-			def term_type
-				:literal
-			end
-  end
-
-  module Term3
-			def term_type
-				:reference
-			end
-  end
-
-  module Term4
   end
 
   def _nt_term
@@ -366,22 +643,18 @@ module D16Asm
     i0, s0 = index, []
     i1 = index
     r2 = _nt_register
-    r2.extend(Term0)
     if r2
       r1 = r2
     else
       r3 = _nt_special_value
-      r3.extend(Term1)
       if r3
         r1 = r3
       else
         r4 = _nt_literal
-        r4.extend(Term2)
         if r4
           r1 = r4
         else
           r5 = _nt_reference
-          r5.extend(Term3)
           if r5
             r1 = r5
           else
@@ -412,7 +685,8 @@ module D16Asm
     end
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
-      r0.extend(Term4)
+      r0.extend(Term0)
+      r0.extend(Term1)
     else
       @index = i0
       r0 = nil
@@ -421,6 +695,12 @@ module D16Asm
     node_cache[:term][start_index] = r0
 
     r0
+  end
+
+  module Decimal0
+			def value
+				text_value.to_i(10)
+			end
   end
 
   def _nt_decimal
@@ -453,6 +733,7 @@ module D16Asm
       r0 = nil
     else
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
+      r0.extend(Decimal0)
     end
 
     node_cache[:decimal][start_index] = r0
@@ -461,6 +742,12 @@ module D16Asm
   end
 
   module Hex0
+  end
+
+  module Hex1
+			def value
+				text_value[2..-1].to_i(16)
+			end
   end
 
   def _nt_hex
@@ -509,6 +796,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Hex0)
+      r0.extend(Hex1)
     else
       @index = i0
       r0 = nil
@@ -520,6 +808,16 @@ module D16Asm
   end
 
   module Literal0
+  end
+
+  module Literal1
+			def content
+				sign = 1
+				if text_value.start_with? '-'
+					sign = -1
+				end
+				{:type => :literal, :value => elements[1].value * sign}
+			end
   end
 
   def _nt_literal
@@ -566,6 +864,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Literal0)
+      r0.extend(Literal1)
     else
       @index = i0
       r0 = nil
@@ -577,6 +876,12 @@ module D16Asm
   end
 
   module Reference0
+  end
+
+  module Reference1
+			def content
+				{:type => :reference, :token => text_value}
+			end
   end
 
   def _nt_reference
@@ -633,6 +938,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Reference0)
+      r0.extend(Reference1)
     else
       @index = i0
       r0 = nil
@@ -644,6 +950,12 @@ module D16Asm
   end
 
   module Register0
+  end
+
+  module Register1
+			def content
+				{:type => :register, :token => text_value}
+			end
   end
 
   def _nt_register
@@ -684,6 +996,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(Register0)
+      r0.extend(Register1)
     else
       @index = i0
       r0 = nil
@@ -695,6 +1008,12 @@ module D16Asm
   end
 
   module SpecialValue0
+  end
+
+  module SpecialValue1
+			def content
+				{:type => :special, :token => text_value}
+			end
   end
 
   def _nt_special_value
@@ -842,6 +1161,7 @@ module D16Asm
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
       r0.extend(SpecialValue0)
+      r0.extend(SpecialValue1)
     else
       @index = i0
       r0 = nil

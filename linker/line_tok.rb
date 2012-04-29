@@ -1,5 +1,9 @@
 require_relative 'abstract_asm.rb'
 
+require 'treetop'
+require_relative '../grammars/D16Asm'
+
+
 SPACE = /\s+/i
 KILL_COMMENT = /(;.*$)/i
 
@@ -13,15 +17,10 @@ def parse_instruction_line(ret_table, instr_tok, line_rem)
       raise ParseError.new("No parameters given for instruction '#{instr_tok}'.")
   end
   
-  if param_toks.size > 0  #first token is now b param
-    ret_table[:b_token] = param_toks[0]
-    ret_table[:param_b] = parse_param_expr(param_toks[0]) 
-  end
+  paramp = D16AsmParser.new
   
-  if param_toks.size > 1 #second token is now a param
-    ret_table[:a_token] = param_toks[1]
-    ret_table[:param_a] = parse_param_expr(param_toks[1])
-  end
+  ret_table[:params] = paramp.parse(line_rem).content.reject {|r| r.nil?}
+  puts ret_table[:params]
 end
 
 

@@ -1,18 +1,68 @@
 grammar D16Asm
 	rule parameters
-		expression (',' expression)*
+		indirect_or_direct additional_param* (';' .*)? {
+			def content
+				retval = []
+				retval << elements[0].content
+				if elements[1] && !elements[1].empty?
+					retval.concat(elements[1].elements.map {|e| e.content})
+				end
+				retval
+			end
+		}
+	end
+	
+	rule indirect_or_direct
+		('[' [ \t]*)? expression  ([ \t]* ']')? {
+			def content
+				retval = elements[1].content
+				retval[:indirect] = true unless elements[0].empty?
+				retval
+			end
+		}
+	end
+	
+	
+	rule additional_param
+		comma indirect_or_direct {
+			def content
+				elements[1].content
+			end
+		}
+	end
+	
+	rule comma
+		',' [ \t]*
 	end
 
 	rule expression
-		term (additive / subtractive)?
+		term (additive / subtractive)? {
+			def content
+				retval = {:lhs => elements[0].content}
+				if elements.length > 1 && elements[1].respond_to?('content')
+					retval[:rhs] = elements[1].content
+				end
+				retval
+			end
+		}
 	end
 	
 	rule additive
-		plus expression
+		plus expression {
+			def content
+				{:operator => '+',
+				 :expr => elements[1].content}
+			end
+		}
 	end
 	
 	rule subtractive
-		minus expression
+		minus expression {
+			def content
+				{:operator => '-',
+				 :expr => elements[1].content}
+			end
+		}
 	end
 	
 	rule plus
@@ -24,51 +74,65 @@ grammar D16Asm
 	end
 	
 	rule term
-		(register {
-			def term_type
-				:register
-			end
-		} 
-		/ special_value {
-			def term_type
-				:special
+		( register
+		/ special_value
+		/ literal 
+		/ reference ) [ \t]* {
+			def content
+				elements[0].content
 			end
 		}
-		
-		/ literal {
-			def term_type
-				:literal
-			end
-		} 
-		
-		/ reference {
-			def term_type
-				:reference
-			end
-		}) [ \t]*
 	end
 	
 	rule decimal
-		[0-9]+
+		[0-9]+ {
+			def value
+				text_value.to_i(10)
+			end
+		}
 	end
 	
 	rule hex
-		'0x' [0-9a-fA-F]+
+		'0x' [0-9a-fA-F]+ {
+			def value
+				text_value[2..-1].to_i(16)
+			end
+		}
 	end
 	
 	rule literal
-		'-'? (hex / decimal)
+		'-'? (hex / decimal) {
+			def content
+				sign = 1
+				if text_value.start_with? '-'
+					sign = -1
+				end
+				{:type => :literal, :value => elements[1].value * sign}
+			end
+		}
 	end
 	
 	rule reference
-		[a-zA-Z\._$]+ [a-zA-Z\._0-9]*
+		[a-zA-Z\._$]+ [a-zA-Z\._0-9]* {
+			def content
+				{:type => :reference, :token => text_value}
+			end
+		}
 	end
 	
 	rule register
-		[abcxyzijABCXYZIJ] !([a-zA-Z0-9\._$])
+		[abcxyzijABCXYZIJ] !([a-zA-Z0-9\._$]) {
+			def content
+				{:type => :register, :token => text_value}
+			end
+		}
 	end
 	
 	rule special_value
-		('sp' / 'SP' / 'pc' / 'PC' / 'ex' / 'EX' / 'push' / 'PUSH' / 'pop' / 'POP') !([a-zA-Z0-9\._$])
+		('sp' / 'SP' / 'pc' / 'PC' / 'ex' / 'EX' / 'push' / 'PUSH' / 'pop' / 'POP') !([a-zA-Z0-9\._$]) {
+			def content
+				{:type => :special, :token => text_value}
+			end
+		}
 	end
 end

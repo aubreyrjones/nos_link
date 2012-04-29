@@ -1,0 +1,22 @@
+grammar Addition
+  rule additive
+    (number plus term:(additive | number)) {
+      number.value + term.value
+    }
+  end
+
+  rule number
+    ([0-9]+ space) {
+      to_i
+    }
+  end
+
+  rule plus
+    '+' space
+  end
+
+  rule space
+    [ \t]*
+  end
+end
+

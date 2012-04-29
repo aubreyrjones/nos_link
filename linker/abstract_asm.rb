@@ -43,10 +43,13 @@ DIRECTIVES = Hash.new
 NULL_DIRS = Hash.new
 DATA_DIRECTIVES = Hash.new
   
-declare(INSTRUCTIONS, 1, "set add sub mul div mod shl shr and bor xor ife ifn ifg ifb")
+declare(INSTRUCTIONS, 1, "set add sub mul mli div dvi mod and bor xor shr asr shl sti ifb ifc ife ifn ifg ifa ifl ifu")
+declare(INSTRUCTIONS, 0x1a, "adx sbx")
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
-declare(REGISTERS, 0, "a b c x y z i j h")
-declare(VALUES, 0x18, "pop peek push sp pc o")
+declare(EXTENDED_INSTRUCTIONS, 0x07, "hcf int iag ias")
+declare(EXTENDED_INSTRUCTIONS, 0x10, "hwn hwq")
+declare(REGISTERS, 0, "a b c x y z i j")
+declare(VALUES, 0x18, "push peek pick push sp pc o")
 declare(DATA_DIRECTIVES, 0x00, '.byte .short .word .uint16_t .string .asciz')
 declare(DIRECTIVES, 0x00, ".private .hidden #{DATA_DIRECTIVES.keys.join(' ')} .data .text .func .endfunc")
 declare(NULL_DIRS, 0x00, '.globl .global .extern .align .section .zero')
@@ -68,8 +71,8 @@ INDIRECT_NEXT = 0x1e
 LITERAL_NEXT = 0x1f
 SHORT_LITERAL_OFFSET = 0x20
 
-HEX_RE = /^0x([0-9a-f]+)$/i
-DEC_RE = /^(\d+)$/
+HEX_RE = /^(-)?0x([0-9a-f]+)$/i
+DEC_RE = /^(-)?(\d+)$/
 
 #definition of a legal label or source symbol
 LABEL_RE = /[\._a-z]+[a-z0-9\._]+/i
@@ -360,9 +363,9 @@ class Instruction
   # Get the opcode for this instruction.
   def opcode
     if @extended
-      return 0x00 | (@op << 4) | (@a.mode_bits << 10)
+      return 0x00 | (@op << 5) | (@a.mode_bits << 10)
     end
-    return @op | (@a.mode_bits << 4) | (@b.mode_bits << 10)
+    return @op | (@a.mode_bits << 10) | (@b.mode_bits << 5)
   end
 
   # Reconstruct a string rep of this instruction.
@@ -419,8 +422,14 @@ class InlineData
         if lit.nil?
           puts "BAD"
         end
+        
+        neg = 1
+        if lit.start_with?('-')
+          neg = -1
+        end
+        
         if lit =~ HEX_RE
-          @words << $1.to_i(16)
+          @words << $1.to_i(16) * neg
         elsif lit =~ DEC_RE   
           @words << $1.to_i(10)
         elsif lit =~ LABEL_RE

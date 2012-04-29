@@ -1,0 +1,74 @@
+grammar D16Asm
+	rule parameters
+		expression (',' expression)*
+	end
+
+	rule expression
+		term (additive / subtractive)?
+	end
+	
+	rule additive
+		plus expression
+	end
+	
+	rule subtractive
+		minus expression
+	end
+	
+	rule plus
+		'+' [ \t]*
+	end
+	
+	rule minus
+		'-' [ \t]*
+	end
+	
+	rule term
+		(register {
+			def term_type
+				:register
+			end
+		} 
+		/ special_value {
+			def term_type
+				:special
+			end
+		}
+		
+		/ literal {
+			def term_type
+				:literal
+			end
+		} 
+		
+		/ reference {
+			def term_type
+				:reference
+			end
+		}) [ \t]*
+	end
+	
+	rule decimal
+		[0-9]+
+	end
+	
+	rule hex
+		'0x' [0-9a-fA-F]+
+	end
+	
+	rule literal
+		'-'? (hex / decimal)
+	end
+	
+	rule reference
+		[a-zA-Z\._$]+ [a-zA-Z\._0-9]*
+	end
+	
+	rule register
+		[abcxyzijABCXYZIJ] !([a-zA-Z0-9\._$])
+	end
+	
+	rule special_value
+		('sp' / 'SP' / 'pc' / 'PC' / 'ex' / 'EX' / 'push' / 'PUSH' / 'pop' / 'POP') !([a-zA-Z0-9\._$])
+	end
+end

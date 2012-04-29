@@ -6,8 +6,25 @@ EMBED_R_RE = /\+?\{(.*)\}\+?/
 
 VALUE_RE = /^(#{regex_keys(VALUES)})$/i
 
-def parse_literal(token, should_negate)
-  sign = should_negate ? -1 : 1
+def parse_literal(token, separated_sign = nil)
+  sign = 1
+  
+  if separated_sign.nil?
+    if token.start_with?('+')
+      token = token[1..-1]
+    elsif token.start_with?('-')
+      sign *= -1
+      token = token[1..-1]
+    end
+  else
+    if separated_sign == '+'
+      #nop
+    elsif separated_Sign == '-'
+      sign *= -1
+    end
+  end
+  
+  
   base = 10
   to_i_token = token
   begin
@@ -16,7 +33,7 @@ def parse_literal(token, should_negate)
       return token[2..-1].to_i(16) * sign
     end
 
-    return to_i_token.to_i(base) * sign
+    return to_i_token.to_i(10) * sign
   rescue 
     raise ParseError("Cannot parse numeric literal '#{token}'.")
   end
@@ -61,14 +78,14 @@ def parse_param_expr(expr)
   end
 
   #tokenize this portion.
-  negate_next = false
+  current_sign = false
   part = ['blah', 'blah', expr.lstrip]
   while true
     part = part[2].partition(SPACE_PLUS_MINUS)
     
-    if part[1] == '-'
-      negate_next = !negate_next
-    end 
+    unless part[1] =~ /^\s*$/
+      current_sign = part[1]
+    end
     
     if part[0].empty?
       if part[2].empty?
@@ -79,8 +96,8 @@ def parse_param_expr(expr)
 
     tok = part[0]
     
-    if tok =~ /^\d/
-      accum_offset(ret_table, parse_literal(tok, negate_next))
+    if tok =~ HEX_RE || tok =~ DEC_RE
+      accum_offset(ret_table, parse_literal(tok, current_sign))
       should_negate = false
       next
     end

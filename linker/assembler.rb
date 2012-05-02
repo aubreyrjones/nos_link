@@ -10,6 +10,15 @@ def link_error_stop(e, filename, abs_line)
   exit 1 unless $DONT_STOP_ON_ERROR
 end
 
+def eval_error_stop(e, filename, abs_line)
+  puts "FATAL EVAL ERROR"
+  puts "Error: #{e.msg}"
+  puts "in file #{filename} on line #{abs_line[:line_number] + 1}"
+  puts "Errant Line: #{abs_line[:original_line]}"
+  puts e.backtrace if $config[:hacking]
+  exit 1 unless $DONT_STOP_ON_ERROR
+end
+
 #
 #
 # Responsible for resolving references while
@@ -78,21 +87,6 @@ class Assemblinker
     end
   end
 
-  def resolve_data_label_refs(instr) 
-    instr.words.map! do |word|
-      if word.class != String
-        word
-      else
-        ref_sym = resolve(@symbols, instr.source, word, instr.scope)
-        ref_sym.referenced
-        if ref_sym.nil?
-          raise LinkError.new("Unfulfilled link error. Trying to find: #{word}")
-        end
-        ref_sym
-      end
-    end
-  end
-
   # Resolve all instruction parameters.
   # At this stage, the program is done in an abstract sense.
   # All that's left is turning the abstract instructions into binary.
@@ -138,18 +132,21 @@ class Assemblinker
       instr.fix(assembled_address)
       assembled_address += instr.size
     end
-#    if @end_symbol.referenced?
-#      @end_symbol.def_instr.words << assembled_address
-#    end
   end
 
   # Have each instruction generate its binary code.
   def realize
+    refscope = ReferenceScope.new
+    refscope.symbol_table = @symbols
     instructions.each do |instr|
       begin
-        instr.realize
+        refscope.filename = instr.source
+        refscope.parent = instr.scope
+        instr.realize(refscope)
       rescue LinkError => e
         link_error_stop(e, instr.source, instr.abs_line)
+      rescue EvalError => e
+        eval_error_stop(e, instr.source, instr.abs_line)
       end
     end
   end

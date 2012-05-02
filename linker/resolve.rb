@@ -30,17 +30,13 @@ def resolve(symbol_table, filename, symbol_name, current_global = nil)
   end
 end
 
-class Scope
-  attr_accessor :symbol_table, :filename, :symbol_name, :current_global
-  
-  def initialize(table, file, symbol, global)
-    symbol_table = table
-    filename = file
-    symbol_name = symbol
-    current_global = global
-  end
+class ReferenceScope
+  attr_accessor :symbol_table, :filename, :parent
   
   def ref(reference)
-    resolve(symbol_table,filename,symbol_name,current_global)
+    if symbol_table.nil?
+      raise LinkError.new("Nil symbol table. Indicates internal error.")
+    end
+    resolve(symbol_table, filename, reference, parent)
   end
 end

@@ -157,25 +157,22 @@ class ObjectModule
       end
       
       if abs_line[:instr]
-        param_a = nil
-        param_b = nil
-        if abs_line[:param_a]
-          param_a = Param.new(abs_line[:param_a])
-          if abs_line[:param_b]
-            param_b = Param.new(abs_line[:param_b])
-          end
+        instr_clz = nil
+        if DATA_DIRECTIVES.has_key?(abs_line[:instr])
+          instr_clz = InlineData
+        elsif ALL_INSTR.has_key?(abs_line[:instr])
+          instr_clz = Op
+        else
+          puts "Unknown instruction #{abs_line[:instr]}"
+          raise ParseError.new("Unknown instruction #{abs_line[:instr]}")
         end
         
-        instr = Instruction.new(@filename, 
+        # require 'ruby-debug/debugger'
+        
+        instr = instr_clz.new(@filename, 
                                 last_global_symbol, 
                                 pending_symbols, 
-                                abs_line, 
-                                param_a, 
-                                param_b)
-        define_and_push(instr, pending_symbols)
-        pending_symbols = []
-      elsif abs_line[:directive] =~ DATA_RE
-        instr = InlineData.new(@filename, last_global_symbol, pending_symbols, abs_line)
+                                abs_line)
         define_and_push(instr, pending_symbols)
         pending_symbols = []
       end
@@ -234,8 +231,8 @@ if __FILE__ == $PROGRAM_NAME
   end
   
   unless om.nil?
-    om.new_tokenize
     puts om.print_abstract.to_yaml
+    puts om.print_listing()
     # om.print_listing
   end
 end

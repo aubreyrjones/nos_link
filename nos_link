@@ -77,27 +77,29 @@ end
 
 assembler = Assemblinker.new(symbol_table, asm_mods)
 
-assembler.assemble
-
-if $config[:pre_bin]
-  puts assembler.instr_list.join("\n")
-  exit
-end
-
 assembler.fix
-
-if $config[:unref_symbols]
-  puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"
-  exit
-end
 
 assembler.realize
 
-unless $config[:bin_listing]
-  open($config[:output_binary], 'w') do |outfile|
-    assembler.binary(outfile)
-  end
-else
+
+
+
+# assembler.assemble
+
+# if $config[:pre_bin]
+#  puts assembler.instr_list.join("\n")
+#  exit
+# end
+
+# if $config[:unref_symbols]
+#  puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"
+#  exit
+# end
+# unless $config[:bin_listing]
+#  open($config[:output_binary], 'w') do |outfile|
+#    assembler.binary(outfile)
+#  end
+# else
   assembler.print_hex_and_instr
-end
+# end
 

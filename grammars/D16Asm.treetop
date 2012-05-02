@@ -1,6 +1,6 @@
 grammar D16Asm
 	rule parameters
-		indirect_or_direct additional_param* (';' .*)? {
+		indirect_or_direct additional_param* ([ \t]*)? (';' .*)? {
 			def content
 				retval = []
 				retval << elements[0].content
@@ -14,7 +14,7 @@ grammar D16Asm
 	
 	# Parameters may be direct or indirect
 	rule indirect_or_direct
-		('[' [ \t]*)? expression  ([ \t]* ']')? {
+		('[' [ \t]*)? expression ([ \t]*)? (']')? {
 			def content
 				retval = elements[1].content
 				retval[:indirect] = !elements[0].empty?
@@ -44,7 +44,7 @@ grammar D16Asm
 				if elements.length > 1 && elements[1].respond_to?('content')
 					sub_expr = elements[1].content 
 					retval[:rhs] = sub_expr[:expr]
-					retval[:rhs][:operator] = sub_expr[:operator]
+					retval[:rhs][:term][:operator] = sub_expr[:operator]
 				end
 				retval
 			end

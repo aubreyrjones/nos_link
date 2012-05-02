@@ -56,47 +56,70 @@ module D16Asm
       r2 = instantiate_node(SyntaxNode,input, i2...index, s2)
       s0 << r2
       if r2
-        i5, s5 = index, []
-        if has_terminal?(';', false, index)
-          r6 = instantiate_node(SyntaxNode,input, index...(index + 1))
-          @index += 1
-        else
-          terminal_parse_failure(';')
-          r6 = nil
-        end
-        s5 << r6
-        if r6
-          s7, i7 = [], index
-          loop do
-            if index < input_length
-              r8 = instantiate_node(SyntaxNode,input, index...(index + 1))
-              @index += 1
-            else
-              terminal_parse_failure("any character")
-              r8 = nil
-            end
-            if r8
-              s7 << r8
-            else
-              break
-            end
+        s5, i5 = [], index
+        loop do
+          if has_terminal?('\G[ \\t]', true, index)
+            r6 = true
+            @index += 1
+          else
+            r6 = nil
           end
-          r7 = instantiate_node(SyntaxNode,input, i7...index, s7)
-          s5 << r7
+          if r6
+            s5 << r6
+          else
+            break
+          end
         end
-        if s5.last
-          r5 = instantiate_node(SyntaxNode,input, i5...index, s5)
-          r5.extend(Parameters0)
-        else
-          @index = i5
-          r5 = nil
-        end
+        r5 = instantiate_node(SyntaxNode,input, i5...index, s5)
         if r5
           r4 = r5
         else
           r4 = instantiate_node(SyntaxNode,input, index...index)
         end
         s0 << r4
+        if r4
+          i8, s8 = index, []
+          if has_terminal?(';', false, index)
+            r9 = instantiate_node(SyntaxNode,input, index...(index + 1))
+            @index += 1
+          else
+            terminal_parse_failure(';')
+            r9 = nil
+          end
+          s8 << r9
+          if r9
+            s10, i10 = [], index
+            loop do
+              if index < input_length
+                r11 = instantiate_node(SyntaxNode,input, index...(index + 1))
+                @index += 1
+              else
+                terminal_parse_failure("any character")
+                r11 = nil
+              end
+              if r11
+                s10 << r11
+              else
+                break
+              end
+            end
+            r10 = instantiate_node(SyntaxNode,input, i10...index, s10)
+            s8 << r10
+          end
+          if s8.last
+            r8 = instantiate_node(SyntaxNode,input, i8...index, s8)
+            r8.extend(Parameters0)
+          else
+            @index = i8
+            r8 = nil
+          end
+          if r8
+            r7 = r8
+          else
+            r7 = instantiate_node(SyntaxNode,input, index...index)
+          end
+          s0 << r7
+        end
       end
     end
     if s0.last
@@ -117,16 +140,13 @@ module D16Asm
   end
 
   module IndirectOrDirect1
-  end
-
-  module IndirectOrDirect2
     def expression
       elements[1]
     end
 
   end
 
-  module IndirectOrDirect3
+  module IndirectOrDirect2
 			def content
 				retval = elements[1].content
 				retval[:indirect] = !elements[0].empty?
@@ -190,24 +210,28 @@ module D16Asm
       r6 = _nt_expression
       s0 << r6
       if r6
-        i8, s8 = index, []
-        s9, i9 = [], index
+        s8, i8 = [], index
         loop do
           if has_terminal?('\G[ \\t]', true, index)
-            r10 = true
+            r9 = true
             @index += 1
           else
-            r10 = nil
+            r9 = nil
           end
-          if r10
-            s9 << r10
+          if r9
+            s8 << r9
           else
             break
           end
         end
-        r9 = instantiate_node(SyntaxNode,input, i9...index, s9)
-        s8 << r9
-        if r9
+        r8 = instantiate_node(SyntaxNode,input, i8...index, s8)
+        if r8
+          r7 = r8
+        else
+          r7 = instantiate_node(SyntaxNode,input, index...index)
+        end
+        s0 << r7
+        if r7
           if has_terminal?(']', false, index)
             r11 = instantiate_node(SyntaxNode,input, index...(index + 1))
             @index += 1
@@ -215,27 +239,19 @@ module D16Asm
             terminal_parse_failure(']')
             r11 = nil
           end
-          s8 << r11
+          if r11
+            r10 = r11
+          else
+            r10 = instantiate_node(SyntaxNode,input, index...index)
+          end
+          s0 << r10
         end
-        if s8.last
-          r8 = instantiate_node(SyntaxNode,input, i8...index, s8)
-          r8.extend(IndirectOrDirect1)
-        else
-          @index = i8
-          r8 = nil
-        end
-        if r8
-          r7 = r8
-        else
-          r7 = instantiate_node(SyntaxNode,input, index...index)
-        end
-        s0 << r7
       end
     end
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
+      r0.extend(IndirectOrDirect1)
       r0.extend(IndirectOrDirect2)
-      r0.extend(IndirectOrDirect3)
     else
       @index = i0
       r0 = nil
@@ -361,7 +377,7 @@ module D16Asm
 				if elements.length > 1 && elements[1].respond_to?('content')
 					sub_expr = elements[1].content 
 					retval[:rhs] = sub_expr[:expr]
-					retval[:rhs][:operator] = sub_expr[:operator]
+					retval[:rhs][:term][:operator] = sub_expr[:operator]
 				end
 				retval
 			end

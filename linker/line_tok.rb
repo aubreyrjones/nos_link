@@ -15,7 +15,15 @@ def parse_instruction_line(ret_table, instr_tok, line_rem)
   
   paramp = D16AsmParser.new
   
-  ret_table[:params] = paramp.parse(line_rem).content.reject {|r| r.nil?}
+  parsed_params = paramp.parse(line_rem)
+  if parsed_params.nil?
+    reason = "Parameter parse failure. Parameter line: \"#{line_rem}\" \n"
+    reason << "Failure reason: #{paramp.failure_reason()}\n"
+    reason << "Input column: #{paramp.failure_column()}"
+    raise ParseError.new(reason)
+  end
+  
+  ret_table[:params] = parsed_params.content.reject {|r| r.nil?}
   ret_table
 end
 
@@ -26,10 +34,13 @@ def tokenize_line(filename, line_no, line_str)
   ret_table[:line_number] = line_no
     
   part = ['blah', 'blah', line_str]
-  while true
+  while true  
     part = part[2].partition(SPACE)
     if part[0].empty?
-      break
+      if part[2].empty?
+        break
+      end
+      next
     end
     
     if part[0].start_with?(';')
@@ -49,16 +60,14 @@ def tokenize_line(filename, line_no, line_str)
     
     downtoken = token.downcase
     
-    puts downtoken
-    require 'ruby-debug/debugger'
-    if INSTRUCTIONS.has_key?(downtoken) || DATA_DIRECTIVES.has_key?(downtoken) 
+    if ALL_INSTR.has_key?(downtoken) || DATA_DIRECTIVES.has_key?(downtoken) 
       ret_table[:instr] = downtoken
-      ret_table[:instr_rem] = part[2]
+      ret_table[:instr_rem] = part[2].strip
       parse_instruction_line(ret_table, ret_table[:instr], ret_table[:instr_rem])
       break
     elsif DIRECTIVES.has_key?(downtoken)
       ret_table[:directive] = token.downcase
-      ret_table[:directive_rem] = part[2]
+      ret_table[:directive_rem] = part[2].strip
       break
     elsif token.start_with?('.')
       unless token =~ NULL_DIR_RE
@@ -68,6 +77,7 @@ def tokenize_line(filename, line_no, line_str)
       ret_table[:unknown_directive_rem] = part[2]
       break
     else
+      require 'ruby-debug/debugger'
       raise ParseError.new("Bad token: #{token}.")
     end
   end

@@ -164,11 +164,40 @@ class Param
     end
     buf
   end
+  
+  def expr_eval_to_s
+    if @last_eval_state.nil?
+      return "<unevaluated>"
+    end
+    
+    str = ''
+    if @offset
+      str << "#{@offset < 0 ? '-' : ''}0x#{@offset.abs.to_s(16)}"
+    end
+    
+    if @last_eval_state[:special] || @last_eval_state[:register]
+      if @offset
+        str << '+'
+      end
+      if @last_eval_state[:special]
+        str << @last_eval_state[:special_tok]
+      elsif @last_eval_state[:register]
+        str << @last_eval_state[:reg_tok]
+      end      
+    end
+    
+    str
+  end
 
   # Get a reconstructed textual rep of this parameter.
   def to_s
     template = indirect? ? "[%s]" : "%s"
     return template % expr_to_s
+  end
+  
+  def to_s_eval
+    template = indirect? ? "[%s]" : "%s"
+    return template % expr_eval_to_s
   end
 
   # Does this parameter demand an additional word in the instruction?
@@ -238,7 +267,7 @@ class Param
     
     if state[:register]
       if state[:accum]
-        raise EvalError.new("There is no 'register+next' direct adressing mode.") unless indirect?
+        raise EvalError.new("There is no 'register+next' direct adressing mode. TANSTAAFL.") unless indirect?
         state[:mode] = state[:register] + INDIRECT_REG_NEXT_OFFSET
         state[:offset] = state[:accum]
       elsif indirect?
@@ -255,11 +284,14 @@ class Param
     
     @mode_bits = state[:mode]
     @param_word = state[:offset]
+    @offset = state[:offset]
     
     if @mode_bits.nil?
       require 'ruby-debug/debugger'
     end
       
+    @last_eval_state = state
+    
     state
   end
   
@@ -349,9 +381,20 @@ class Instruction
     return "#{labels}\t%s #{@params.map{|p| p.to_s}.join(", ")} #{addr_line}"
   end
   
+  def labels_address_params_eval
+    labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
+    labels << "\n" unless labels.empty?
+    addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
+    return "#{labels}\t%s #{@params.map{|p| p.to_s_eval}.join(", ")} #{addr_line}"
+  end
+  
   # Reconstruct a string rep of this instruction.
   def to_s
-    labels_address_params % "[should subclass]"
+    labels_address_params % ["should subclass"]
+  end
+  
+  def to_s_eval
+    labels_address_params_eval % ["should subclass"] 
   end
 end
 
@@ -409,6 +452,10 @@ class Op < Instruction
     labels_address_params % [@instr_token]
   end
 
+  def to_s_eval
+    labels_address_params_eval % [@instr_token] 
+  end
+  
 end
 
 class NullInstruction
@@ -432,9 +479,12 @@ class NullInstruction
   end
   
   def to_s
-    labels_address_params % ".null_instruction"
+    labels_address_params % [".null_instruction"]
   end
   
+  def to_s_eval
+    labels_address_params_eval % [".null_instruction"]
+  end
 end
 
 
@@ -518,6 +568,10 @@ class InlineData < Instruction
 
   def to_s
     labels_address_params % [@directive]
+  end
+  
+  def to_s_eval
+    labels_address_params_eval % [@directive]
   end
 end
 

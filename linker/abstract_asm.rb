@@ -51,11 +51,12 @@ DIRECTIVES = Hash.new
 NULL_DIRS = Hash.new
 DATA_DIRECTIVES = Hash.new
   
-declare(INSTRUCTIONS, 1, "set add sub mul mli div dvi mod and bor xor shr asr shl sti ifb ifc ife ifn ifg ifa ifl ifu")
+declare(INSTRUCTIONS, 1, "set add sub mul mli div dvi mod mdi and bor xor shr asr shl ifb ifc ife ifn ifg ifa ifl ifu")
 declare(INSTRUCTIONS, 0x1a, "adx sbx")
+declare(INSTRUCTIONS, 0x1e, "sti std")
 declare(EXTENDED_INSTRUCTIONS, 1, "jsr")
-declare(EXTENDED_INSTRUCTIONS, 0x07, "hcf int iag ias")
-declare(EXTENDED_INSTRUCTIONS, 0x10, "hwn hwq")
+declare(EXTENDED_INSTRUCTIONS, 0x08, "int iag ias rfi iaq")
+declare(EXTENDED_INSTRUCTIONS, 0x10, "hwn hwq hwi")
 declare(REGISTERS, 0, "a b c x y z i j")
 declare(VALUES, 0x18, "push peek pick sp pc ex")
 VALUES['pop'] = VALUES['push']

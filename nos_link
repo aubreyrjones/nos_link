@@ -14,9 +14,10 @@ EOS
   opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
   opt :loader, "Choose which loader stub to use. Choose from: #{KNOWN_LOADERS.join(',')}", :type => :string, :default => KNOWN_LOADERS[0]
   opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
-  opt :hacking, "Are you hacking on nos_link? You want exceptions, don't you?", :type => :boolean
+  opt :hacking, "Are you hacking on nos_link? You want exceptions, don't you? ", :type => :boolean
   opt :base_address, "Assemble to a different base address.", :type => :integer, :default => 0
   opt :unref_symbols, "Print a list of unreferenced symbols and stop.", :type => :boolean
+  opt :symbol_table, "Print the symbol table, then exit.", :type => :boolean
 end
 
 Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
@@ -77,19 +78,27 @@ end
 
 assembler = Assemblinker.new(symbol_table, asm_mods)
 
+if $config[:symbol_table]
+  puts assembler.symbols.values.map{|v| v.to_s}.join("\n")
+  exit
+end
+
 assembler.fix
 
 assembler.realize
 
+if $config[:pre_bin]
+  puts assembler.instr_list.join("\n")
+  exit
+end
 
-
+if $config[:bin_listing]
+  assembler.print_hex_and_instr
+  exit
+end
 
 # assembler.assemble
 
-# if $config[:pre_bin]
-#  puts assembler.instr_list.join("\n")
-#  exit
-# end
 
 # if $config[:unref_symbols]
 #  puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"
@@ -100,6 +109,6 @@ assembler.realize
 #    assembler.binary(outfile)
 #  end
 # else
-  assembler.print_hex_and_instr
+
 # end
 

@@ -25,6 +25,8 @@ end
 # also building the binary. Woo!
 #
 class Assemblinker
+  attr_reader :symbols, :modules
+
   def initialize(symbols, modules)
     @symbols = symbols
     @modules = modules
@@ -181,19 +183,5 @@ class Assemblinker
       fstr = "%x " * instr_bytes.size
       puts "#{instr.to_s_eval} \t ;#{fstr % instr_bytes}"
     end
-  end
-
-  # Resolve an instruction's parameter.
-  def resolve_param(instr, param)
-    if param.nil? || param.reference_token.nil?
-      return
-    end
-
-    ref_sym = resolve(@symbols, instr.source, param.reference_token, instr.scope)
-    if ref_sym.nil?
-      raise LinkError.new("Unfulfilled link error. Trying to find: #{param.reference_token}")
-    end
-
-    param.resolve(ref_sym)
   end
 end

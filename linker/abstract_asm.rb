@@ -114,12 +114,13 @@ class Param
     @parse_tree = parse_tree
   end
   
+  # Is this expression indirect?
   def indirect?
     @parse_tree[:indirect]
   end
   
-  def each_term(start_instr = nil)
-    
+  # Iterate over each term.
+  def each_term(start_instr = nil)    
     cur_expr = @parse_tree
     
     if start_instr
@@ -138,10 +139,12 @@ class Param
     end
   end
   
+  # Is the given term of the given type?
   def is?(term, type_sym)
     return term[:type] == type_sym
   end
   
+  # Has a term with given type?
   def has_type?(type_sym)
     each_term do |term|
       if is?(term, type_sym)
@@ -150,6 +153,26 @@ class Param
     end
     
     false
+  end
+
+  # Get a list of all of the reference tokens in this parameter.
+  def reference_tokens
+    refs = []
+    each_term do |term|
+      if is?(term, :reference)
+        refs << term[:token]
+      end
+    end
+    refs
+  end
+
+  # Rewrite all reference tokens in globalized/mangled format.
+  # Takes a block with the rewrite rule.
+  def rewrite_reference_tokens
+    each_term do |term|
+      next unless is?(term, :reference)
+      term[:token] = yield term[:token]
+    end
   end
  
   # Get a reconstructed textual representation of this parameter,
@@ -165,6 +188,8 @@ class Param
     buf
   end
   
+  # After the parameter has been evaluated, this will give a
+  # textual representation of the evaluated parameter.
   def expr_eval_to_s
     if @last_eval_state.nil?
       return "<unevaluated>"
@@ -214,7 +239,9 @@ class Param
     #otherwise it is only a register or raw special value
     return false
   end
-  
+
+  # Recursively evaluate terms.
+  # This returns the evaluation state.
   def rec_eval(scope, expr, state)
 
     if is?(expr[:term], :register) || is?(expr[:term], :special)
@@ -241,7 +268,11 @@ class Param
       if is?(expr[:term], :literal)
         loc_value = expr[:term][:value]
       else
-        loc_value = scope.ref(expr[:term][:token]).def_instr.address
+        sym = scope.ref(expr[:term][:token])
+        if sym.nil?
+          raise LinkError.new("Cannot find symbol for reference '#{expr[:term][:token]}'")
+        end
+        loc_value = sym.def_instr.address
       end
         
       if expr[:term][:operator] && expr[:term][:operator] == '-'
@@ -261,6 +292,7 @@ class Param
     return state
   end
 
+  # Evaluate this parameter with the given scope.
   def evaluate(scope)
     state = {}
     rec_eval(scope, @parse_tree, state)
@@ -295,6 +327,7 @@ class Param
     state
   end
   
+  # Evaluate state if it there was a reference to a special value (push, pop, pc, etc.)
   def evaluate_special_state(state)
     
     if state[:special_tok] == 'pop' || state[:special_tok] == 'push'
@@ -458,7 +491,7 @@ class Op < Instruction
   
 end
 
-class NullInstruction
+class NullInstruction < Instruction
   
   def initialize(defined_symbols)
     super("[none]", nil, defined_symbols, {:original_line => "\t.null_instruction ; [synthetic]", :params => []})
@@ -658,6 +691,10 @@ class AsmSymbol
   # Generate a module name from a filename.
   def self.make_module_name(filename)
     filename.gsub(/^\.+/, '').gsub('/', '_')
+  end
+
+  def to_s
+    "#{name} [#{@first_file}] (ref'd: #{referenced?})"
   end
 end
 

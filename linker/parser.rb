@@ -163,7 +163,7 @@ class ObjectModule
         elsif ALL_INSTR.has_key?(abs_line[:instr])
           instr_clz = Op
         else
-          puts "Unknown instruction #{abs_line[:instr]}"
+          puts "Unknown token #{abs_line[:instr]}"
           raise ParseError.new("Unknown instruction #{abs_line[:instr]}")
         end
         
@@ -182,6 +182,20 @@ class ObjectModule
   def define_and_push(instr, pending_symbols)
     pending_symbols.each do |sym|
       sym.define(instr)
+    end
+
+    instr.params.each do |p|
+      p.rewrite_reference_tokens do |ref_tok|
+        res_tok = nil
+        res_sym = resolve(@program_symbols, @filename, ref_tok, instr.scope)
+        if res_sym.nil? #if it's null, it must be a global from another file
+          res_tok = ref_tok #so just keep its name the same
+        else
+          res_sym.referenced # we mark it as referenced
+          res_tok = res_sym.name #If we found it, go ahead and get its mangled name.
+        end
+        res_tok
+      end
     end
     
     @instructions << instr

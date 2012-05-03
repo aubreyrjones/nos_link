@@ -15,7 +15,7 @@ You'll need Ruby 1.9+. Or jRuby 1.6+ in 1.9 mode. They should operate identicall
 If you're running apt-based linux, here is the basic recipe to get up to speed. This may not be the ideal way to install this stuff, but it's the easiest. rpm- or source-based distros will use basically the same approach.
 
     > sudo apt-get install ruby1.9 rubygems1.9
-    > sudo gem install treetop
+    > sudo gem install treetop polyglot
 
 On windows, I'm not entirely sure what to do. But, you need to install ruby from http://www.ruby-lang.org. And you need to install http://rubygems.org.
 

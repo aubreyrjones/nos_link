@@ -472,23 +472,44 @@ class Op < Instruction
     accum
   end
 
+  # Get the b-param, if this instruction has two parameters.
+  def b_param
+    if @params.size > 1
+      return @params[0]
+    end
+    return nil
+  end
+  
+  # Get the a-param if this instruction has two parameters,
+  # otherwise, just return the first parameter.
+  def a_param
+    if @params.size > 1
+      return @params[1]
+    end
+    return @params[0]
+  end
+
   # Get the binary words for this instruction.
   def words
     retval = [opcode]
-    
-    @params.each do |p|
-      retval << p.param_word if p.needs_word?
+
+    if a_param.needs_word?
+      retval << a_param.param_word
     end
-    
+
+    if b_param && b_param.needs_word?
+      retval << b_param.param_word
+    end
+
     return retval
   end
 
   # Get the opcode for this instruction.
   def opcode
     if @extended
-      return 0x00 | (@op << 5) | (@params[0].mode_bits << 10)
+      return 0x00 | (@op << 5) | (a_param.mode_bits << 10)
     else
-      return @op | (@params[1].mode_bits << 10) | (@params[0].mode_bits << 5)
+      return @op | (a_param.mode_bits << 10) | (b_param.mode_bits << 5)
     end
   end
  
@@ -577,6 +598,9 @@ class InlineData < Instruction
       else
         accum += 1
       end
+    end
+    if @directive =~ /asciz/i
+      accum += 1 #for the null word at the end.
     end
     accum
   end

@@ -71,8 +71,7 @@ class Assemblinker
       end
     end
     
-    def each
-      
+    def each      
       @leading.each do |instr|
           yield instr
       end
@@ -166,6 +165,10 @@ class Assemblinker
     end
   end
 
+  def split_up_instruction(instr_word)
+    "(%x|%x|%x) %x " % [(instr_word & 0xfc00) >> 10, (instr_word & 0x03e0) >> 5, (instr_word & 0x001f), instr_word]
+  end
+
   # Print a side-by-side assembly/binary listing.
   def print_hex_and_instr
     instructions.each do |instr|
@@ -175,8 +178,14 @@ class Assemblinker
         encstr = pack_string(instr_bytes)
         binary = instr_bytes.pack(encstr)
         unpacked = binary.unpack(WORD_PACK_SYMBOL * instr_bytes.size)
-        fstr = "%x " * unpacked.size
-        binstr = fstr % unpacked
+        unless instr.is_a?(Op)
+          fstr = "%x " * unpacked.size
+          binstr = fstr % unpacked
+        else
+          binstr = split_up_instruction(unpacked.shift)
+          fstr = "%x " * unpacked.size
+          binstr << fstr % unpacked
+        end
       end
       
       puts "#{instr.to_s_eval} \t ;#{binstr}"

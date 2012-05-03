@@ -78,14 +78,15 @@ end
 
 assembler = Assemblinker.new(symbol_table, asm_mods)
 
-if $config[:symbol_table]
-  puts assembler.symbols.values.map{|v| v.to_s}.join("\n")
-  exit
-end
 
 assembler.fix
 
 assembler.realize
+
+if $config[:symbol_table]
+  puts assembler.symbols.values.map{|v| v.to_s}.join("\n")
+  exit
+end
 
 if $config[:pre_bin]
   puts assembler.instr_list.join("\n")
@@ -100,10 +101,11 @@ end
 # assembler.assemble
 
 
-# if $config[:unref_symbols]
-#  puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"
-#  exit
-# end
+ if $config[:unref_symbols]
+  puts "Unreferenced symbols: #{assembler.get_unref_symbols.join(", ")}"
+  exit
+ end
+
 # unless $config[:bin_listing]
 #  open($config[:output_binary], 'w') do |outfile|
 #    assembler.binary(outfile)

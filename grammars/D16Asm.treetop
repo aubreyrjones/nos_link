@@ -81,7 +81,8 @@ grammar D16Asm
 	
 	# any legal term.
 	rule term
-		( register
+		( string_term
+		/ register
 		/ special_value
 		/ literal 
 		/ reference ) [ \t]* {
@@ -116,6 +117,14 @@ grammar D16Asm
 					sign = -1
 				end
 				{:type => :literal, :token => text_value, :value => elements[1].value * sign}
+			end
+		}
+	end
+	
+	rule string_term
+		'"' [^"]* '"' {
+			def content
+				{:type => :string, :token => text_value, :value => text_value[1..-2]}
 			end
 		}
 	end

@@ -1,3 +1,9 @@
+$MAX_WORD = 2**16
+$MIN_SHORT = -(2**15)
+$MAX_SHORT = (2**15) - 1
+
+WORD_PACK_SYMBOL = 'S>' #16-bit, unsigned, big-endian (Java primitive 'char')
+SHORT_PACK_SYMBOL =  's>' #16-bit, signed, big-endian 
 
 
 # stick consecutive name->number pairings into a hash
@@ -62,7 +68,7 @@ declare(VALUES, 0x18, "push peek pick sp pc ex")
 VALUES['pop'] = VALUES['push']
 declare(DATA_DIRECTIVES, 0x00, '.byte .short .word .uint16_t .string .asciz')
 declare(DIRECTIVES, 0x00, ".private .hidden #{DATA_DIRECTIVES.keys.join(' ')} .data .text .func .endfunc")
-declare(NULL_DIRS, 0x00, '.globl .global .extern .align .section .zero')
+declare(NULL_DIRS, 0x00, '.globl .global .extern .align .section .zero .null_instruction')
 
 ALL_INSTR = Hash.new.merge!(INSTRUCTIONS).merge!(EXTENDED_INSTRUCTIONS)
 
@@ -273,6 +279,7 @@ class Param
         if sym.nil?
           raise LinkError.new("Cannot find symbol for reference '#{expr[:term][:token]}'")
         end
+        sym.referenced
         loc_value = sym.def_instr.address
       end
         
@@ -376,7 +383,11 @@ class Instruction
     @params = []
     unless parsed_line[:params].nil?
       parsed_line[:params].each_with_index do |p, i|
-        @params << Param.new(p, i)
+        if p.is_a? String
+          @params << p
+        else
+          @params << Param.new(p, i)
+        end
       end      
     end
     @module = AsmSymbol::make_module_name(source_file)    
@@ -400,12 +411,12 @@ class Instruction
   
    # Get the size, in words, of the instruction.
   def size
-    puts "this should be subclassed."
+    raise Exception.new("This should be subclassed.")
   end
 
   # Get the binary words for this instruction.
   def words
-    puts "this should be subclassed"
+    raise Exception.new("This should be subclassed.")
   end
 
   def labels_address_params
@@ -419,9 +430,9 @@ class Instruction
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    return "#{labels}\t%s #{@params.map{|p| p.to_s_eval}.join(", ")} #{addr_line}"
+    return "#{labels}\t%s #{@params.map{|p| p.is_a?(String) ? '"' + p + '"' : p.to_s_eval}.join(", ")} #{addr_line}"
   end
-  
+
   # Reconstruct a string rep of this instruction.
   def to_s
     labels_address_params % ["should subclass"]
@@ -498,7 +509,7 @@ class NullInstruction < Instruction
     super("[none]", nil, defined_symbols, {:original_line => "\t.null_instruction ; [synthetic]", :params => []})
   end
 
-  def realize
+  def realize(scope)
     # nop
   end
 
@@ -524,6 +535,7 @@ end
 
 # Inline data definition
 class InlineData < Instruction
+  attr_reader :words
   def initialize(source_file, global_scope, labels, abstract_line = nil)
     super(source_file, global_scope, labels, abstract_line)
     @directive = abs_line[:instr]
@@ -536,31 +548,19 @@ class InlineData < Instruction
   
   def realize(scope)
     @params.each do |p|
+      if p.is_a? String
+        p.each_byte {|b| @words << (0xff & b)}
+        next
+      end
       eval_state = p.evaluate(scope)
       if eval_state[:register] || eval_state[:special]
         raise EvalError.new("Data words may not contain references to registers or special values.")
       end
-      
+      @words << p.param_word
     end
     
-    if @directive =~ /(string)|(asciz)/i
-      
-      puts "strings aren't working yet"
-      exit 1
-            
-      if abs_line[:directive] =~ /asciz/
-        @words << 0x0
-      end
-      return
-    end
-      
-    if abs_line[:directive]=~ /(byte)|(word)|(uint16_t)/i
-      @params.each do |p|
-        @words << p.param_word
-      end
-    end
-    
-    if abs_line[:directive] =~ /(int16_t)|(short)/i
+    if @directive =~ /asciz/i
+      @words << 0x00
     end
   end
 
@@ -569,23 +569,16 @@ class InlineData < Instruction
     @address = address
   end
 
-  # Build the binary representation of the entire instruction,
-  # including any additional words.
-  def realize
-    @words.map! do |word|
-      if word.is_a? AsmSymbol
-        if word.def_instr.address.nil?
-          raise LinkError.new("Cannot find address of #{word.name}")
-        end
-        word.def_instr.address
+  def size
+    accum = 0
+    @params.each do |p|
+      if p.is_a? String
+        accum += p.length
       else
-        word
+        accum += 1
       end
     end
-  end
-
-  def size
-    return @words.size
+    accum
   end
 
   def words_to_s_map

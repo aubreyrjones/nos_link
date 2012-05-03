@@ -6,13 +6,7 @@ require_relative '../grammars/D16Asm'
 
 SPACE = /\s+/i
 
-def parse_instruction_line(ret_table, instr_tok, line_rem)
-  param_toks = line_rem.split(',')
-  
-  if param_toks.nil? || param_toks.size == 0
-      raise ParseError.new("No parameters given for instruction '#{instr_tok}'.")
-  end
-  
+def parse_instruction_line(ret_table, instr_tok, line_rem, allow_strings = nil)
   paramp = D16AsmParser.new
   
   parsed_params = paramp.parse(line_rem)
@@ -23,7 +17,23 @@ def parse_instruction_line(ret_table, instr_tok, line_rem)
     raise ParseError.new(reason)
   end
   
-  ret_table[:params] = parsed_params.content.reject {|r| r.nil?}
+  params = parsed_params.content.reject {|r| r.nil?}
+  
+  params.map! do |p|
+    val = nil
+    if p[:term][:type] == :string
+      if allow_strings
+        val = p[:term][:value]
+      else
+        raise ParseError.new("String literal not allowed in context.")
+      end
+    else
+      val = p
+    end
+    val
+  end
+    
+  ret_table[:params] = params
   ret_table
 end
 
@@ -60,10 +70,10 @@ def tokenize_line(filename, line_no, line_str)
     
     downtoken = token.downcase
     
-    if ALL_INSTR.has_key?(downtoken) || DATA_DIRECTIVES.has_key?(downtoken) 
+    if ALL_INSTR.has_key?(downtoken) || DATA_DIRECTIVES.has_key?(downtoken)
       ret_table[:instr] = downtoken
       ret_table[:instr_rem] = part[2].strip
-      parse_instruction_line(ret_table, ret_table[:instr], ret_table[:instr_rem])
+      parse_instruction_line(ret_table, ret_table[:instr], ret_table[:instr_rem], DATA_DIRECTIVES.has_key?(downtoken))
       break
     elsif DIRECTIVES.has_key?(downtoken)
       ret_table[:directive] = token.downcase

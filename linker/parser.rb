@@ -185,6 +185,7 @@ class ObjectModule
     end
 
     instr.params.each do |p|
+      next unless p.is_a? Param
       p.rewrite_reference_tokens do |ref_tok|
         res_tok = nil
         res_sym = resolve(@program_symbols, @filename, ref_tok, instr.scope)

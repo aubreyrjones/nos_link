@@ -1,6 +1,0 @@
-grammar ParameterExpression
-  rule hex
-    '0x' [0-9]+
-  end
-end
-

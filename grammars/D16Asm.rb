@@ -660,46 +660,51 @@ module D16Asm
 
     i0, s0 = index, []
     i1 = index
-    r2 = _nt_register
+    r2 = _nt_string_term
     if r2
       r1 = r2
     else
-      r3 = _nt_special_value
+      r3 = _nt_register
       if r3
         r1 = r3
       else
-        r4 = _nt_literal
+        r4 = _nt_special_value
         if r4
           r1 = r4
         else
-          r5 = _nt_reference
+          r5 = _nt_literal
           if r5
             r1 = r5
           else
-            @index = i1
-            r1 = nil
+            r6 = _nt_reference
+            if r6
+              r1 = r6
+            else
+              @index = i1
+              r1 = nil
+            end
           end
         end
       end
     end
     s0 << r1
     if r1
-      s6, i6 = [], index
+      s7, i7 = [], index
       loop do
         if has_terminal?('\G[ \\t]', true, index)
-          r7 = true
+          r8 = true
           @index += 1
         else
-          r7 = nil
+          r8 = nil
         end
-        if r7
-          s6 << r7
+        if r8
+          s7 << r8
         else
           break
         end
       end
-      r6 = instantiate_node(SyntaxNode,input, i6...index, s6)
-      s0 << r6
+      r7 = instantiate_node(SyntaxNode,input, i7...index, s7)
+      s0 << r7
     end
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
@@ -889,6 +894,77 @@ module D16Asm
     end
 
     node_cache[:literal][start_index] = r0
+
+    r0
+  end
+
+  module StringTerm0
+  end
+
+  module StringTerm1
+			def content
+				{:type => :string, :token => text_value, :value => text_value[1..-2]}
+			end
+  end
+
+  def _nt_string_term
+    start_index = index
+    if node_cache[:string_term].has_key?(index)
+      cached = node_cache[:string_term][index]
+      if cached
+        cached = SyntaxNode.new(input, index...(index + 1)) if cached == true
+        @index = cached.interval.end
+      end
+      return cached
+    end
+
+    i0, s0 = index, []
+    if has_terminal?('"', false, index)
+      r1 = instantiate_node(SyntaxNode,input, index...(index + 1))
+      @index += 1
+    else
+      terminal_parse_failure('"')
+      r1 = nil
+    end
+    s0 << r1
+    if r1
+      s2, i2 = [], index
+      loop do
+        if has_terminal?('\G[^"]', true, index)
+          r3 = true
+          @index += 1
+        else
+          r3 = nil
+        end
+        if r3
+          s2 << r3
+        else
+          break
+        end
+      end
+      r2 = instantiate_node(SyntaxNode,input, i2...index, s2)
+      s0 << r2
+      if r2
+        if has_terminal?('"', false, index)
+          r4 = instantiate_node(SyntaxNode,input, index...(index + 1))
+          @index += 1
+        else
+          terminal_parse_failure('"')
+          r4 = nil
+        end
+        s0 << r4
+      end
+    end
+    if s0.last
+      r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
+      r0.extend(StringTerm0)
+      r0.extend(StringTerm1)
+    else
+      @index = i0
+      r0 = nil
+    end
+
+    node_cache[:string_term][start_index] = r0
 
     r0
   end

@@ -1,6 +1,5 @@
 require_relative 'resolve.rb'
 
-
 def link_error_stop(e, filename, abs_line)
   puts "FATAL LINK ERROR"
   puts "Error: #{e.msg}"
@@ -40,6 +39,7 @@ class Assemblinker
     @end_symbol = AsmSymbol.new("[none]", '_end', nil)
     @end_symbol.define(NullInstruction.new([@end_symbol]))
     @symbols[@end_symbol.name] = @end_symbol
+    @trailing_instructions << @end_symbol.def_instr
   end
   
   def instr_list
@@ -89,29 +89,7 @@ class Assemblinker
     end
   end
 
-  # Resolve all instruction parameters.
-  # At this stage, the program is done in an abstract sense.
-  # All that's left is turning the abstract instructions into binary.
   def assemble
-    instructions.each do |instr|
-      begin
-        
-        if instr.class == InlineData
-          resolve_data_label_refs(instr)
-          next
-        end
-        
-        next unless instr.class == Instruction
-        resolve_param(instr, instr.a)
-        resolve_param(instr, instr.b)
-      rescue LinkError => e
-        link_error_stop(e, instr.source, instr.abs_line)
-      end
-    end
-    
-    if @end_symbol.referenced?
-      @trailing_instructions << @end_symbol.def_instr
-    end
   end
   
   # Get a list of all unreferenced symbols in the program.
@@ -149,20 +127,41 @@ class Assemblinker
         link_error_stop(e, instr.source, instr.abs_line)
       rescue EvalError => e
         eval_error_stop(e, instr.source, instr.abs_line)
+      rescue Exception => e
+        puts e.backtrace
+        link_error_stop(LinkError.new(e.message), instr.source, instr.abs_line)
       end
     end
   end
 
+  def pack_string(words)
+    str = ''
+    words.each do |word|
+      if word < 0 
+        if word < $MIN_SHORT
+          raise EvalError.new("Negative word value #{word} is less than #{$MIN_SHORT}.") 
+        end
+        str << SHORT_PACK_SYMBOL
+      else
+        if word > $MAX_WORD
+          raise EvalError.new("Word value #{word} is greater than #{$MAX_SHORT}")
+        end
+        str << WORD_PACK_SYMBOL
+      end
+    end
+    str
+  end
+  
   # Write the binary into the given stream.
   def binary(output)
     if instructions.size == 0
       puts "No instruction stream. Cannot create binary."
-      error 1
+      exit 1
     end
 
     instructions.each do |instr|
       instr_bytes = instr.words
-      encstr = 'n' * instr_bytes.size
+      encstr = pack_string(instr_bytes)
       output << instr_bytes.pack(encstr)
     end
   end
@@ -170,9 +169,17 @@ class Assemblinker
   # Print a side-by-side assembly/binary listing.
   def print_hex_and_instr
     instructions.each do |instr|
+      binstr = nil
       instr_bytes = instr.words
-      fstr = "%x " * instr_bytes.size
-      puts "#{instr.to_s_eval} \t ;#{fstr % instr_bytes}"
+      if instr.words && instr.words.size > 0
+        encstr = pack_string(instr_bytes)
+        binary = instr_bytes.pack(encstr)
+        unpacked = binary.unpack(WORD_PACK_SYMBOL * instr_bytes.size)
+        fstr = "%x " * unpacked.size
+        binstr = fstr % unpacked
+      end
+      
+      puts "#{instr.to_s_eval} \t ;#{binstr}"
     end
   end
   

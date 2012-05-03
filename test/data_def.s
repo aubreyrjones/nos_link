@@ -8,6 +8,9 @@
 	.word 10
 	.word 10
 	.word 10
+:negative
+	.short -2331
+	.word "mixed",0x00,"data",0x00
 :comma_data
   .byte 0x10, 16, _end
 :reference

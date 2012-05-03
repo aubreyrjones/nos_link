@@ -106,11 +106,11 @@ end
   exit
  end
 
-# unless $config[:bin_listing]
-#  open($config[:output_binary], 'w') do |outfile|
-#    assembler.binary(outfile)
-#  end
-# else
+
+open($config[:output_binary], 'w') do |outfile|
+  assembler.binary(outfile)
+end
+
 
 # end
 

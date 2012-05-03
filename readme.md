@@ -1,7 +1,7 @@
 NOS LINK
 ========
 
-This is an assembling linker, or linking assembler, for the 0x10c DCPU-16 v1.1.
+This is an assembling linker, or linking assembler, for the 0x10c DCPU-16 v1.7.
 
 It accepts Notch-style assembly code. You may specify as many assembly files as you wish, and they will be linked and assembled into a single binary.
 

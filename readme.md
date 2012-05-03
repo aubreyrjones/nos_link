@@ -60,21 +60,48 @@ Instruction  Parameters
 
 Instruction parameters have their own little syntax. The basic syntax is something like
 
-    (offset arithmetic) + label + register 
+    offset_arithmetic + label + register 
 
 If it's an indirect reference, it will look like
 
-    [(offset arithmetic) + label + register]
+    [offset_arithmetic + label + register]
 
-Any of offset, label, or register may be absent. And may be in any order. The offset may be negative, and subtraction is supported. Evaluated negative offsets will be encoded in 2's complement form, which, when added to the register will result in subtraction. 
+Any of offset, label, or register may be absent. Literals and labels may appear in any order, within any expression. Registers and special values (a, j, pop, pc) must appear as either the left-most or right-most term. It is an error to reference two registers or special values (in any mix) in a single parameter.
 
-Data can be inlined into assembly modules either as individual words, or as text strings, or as a mix of both. There is currently no support for escaping quotation marks inside strings.
+The literal or evaluated offset may be negative, and subtraction is supported in expressions. Evaluated negative offsets will be encoded in 2's complement form, which, when added to the register will result in subtraction. 
 
-Data may be started with a wide array of pseudo-ops, all roughly exactly the same thing--except for one. There is only one real datatype, the word. Encoding is determined only by whether or not the final evaluated value of an offset is positive or negative.
+Parameter example:
 
-The one exception is ".asciz". This directive accepts the standard data arguments, but then appends a null word (with the value 0) to the end of the explicitly encoded data.
+```dasm16
+  jsr some_routine
+  set a, 3
+  mul a, [sp + 4]
+  set x, [some_data_label - 4 + a]
+```
 
-Example:
+A couple of things: you cannot subtract a register (because I can't encode a "negate register and add" parameter), and you cannot have a negative label ('cause a label may be located anywhere in memory). You may, however, subtract a label's value from a literal or other label. This is likely stupid, but it's possible.
+
+BAD parameter example:
+
+```dasm16
+  set pc, [some_label - a] ; BAD!!
+  add pc, -some_label ; BAD!!
+```
+
+Data
+----
+
+Data can be inlined into assembly modules either as individual words, or as text strings, or as a mix of both. It is an error to reference a register or a special value (a, j, pop, pc, etc.) in a data parameter.
+
+Data may be indicated with a wide array of pseudo-ops, all doing exactly the same thing--with one exception.
+
+There is only one real datatype, the word. Encoding is determined only by whether or not the final evaluated value of an offset is positive or negative. If the value is negative, it must be between -(2**15) and -1 (inclusive).
+
+Strings are encoded as a run of words. Negative numbers are just words. Positive numbers are words. Everything is just words. (I may support fixed-point or multi-word literals in the future. But, not at the moment.)
+
+The one exception is ".asciz". This directive accepts the standard data arguments, but then appends a null word (with the value 0) to the end of the explicitly encoded data. This is to ease support of C-style null-terminated strings.
+
+Data example:
 
 ```dasm16
 :single_word_example
@@ -82,11 +109,12 @@ Example:
   .uint16_t 0x10 ; .uint16_t is an alias for .word
   .short -123 ; you can encode a negative value
   .word 34+12-2 ; addition and subtraction are supported
-  .word reference + 4 ; here's arithmetic with references! woo!
+  .word reference + 4, other_ref - 16 ; here's arithmetic with references! woo!
 :string_example
   .string "This is a string."
-  .string "This is",0xff12,"mixed",-23,"data"
+  .string "This is",0xff12,"mixed",-0x23,"data"
   .short "it really doesn't matter the directive"
+  .string "you may escape \"quote\" marks."
 :zero_terminated_string
   .asciz "This is a zero-terminated string."
   .asciz "this",0x23,"mixed data gets zero terminated"

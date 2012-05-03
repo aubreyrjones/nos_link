@@ -4,6 +4,10 @@
 	.string "aaaaaaaaaaaaaaaaaaaaa"
 :zero_str
 	.asciz "bbbbbbbbbbbbbbbbbbbbbb"
+:escaped_string
+	.string "password is \"password\""
+:mixed_string
+	.word 0x23,"fnord",0x23
 :global_dec
 	.word 10
 	.word 10

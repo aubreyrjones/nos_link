@@ -902,8 +902,11 @@ module D16Asm
   end
 
   module StringTerm1
+  end
+
+  module StringTerm2
 			def content
-				{:type => :string, :token => text_value, :value => text_value[1..-2]}
+				{:type => :string, :token => text_value, :value => text_value[1..-2].gsub(/\\"/, '"')}
 			end
   end
 
@@ -930,11 +933,56 @@ module D16Asm
     if r1
       s2, i2 = [], index
       loop do
-        if has_terminal?('\G[^"]', true, index)
-          r3 = true
-          @index += 1
+        i3 = index
+        if has_terminal?('\"', false, index)
+          r4 = instantiate_node(SyntaxNode,input, index...(index + 2))
+          @index += 2
         else
-          r3 = nil
+          terminal_parse_failure('\"')
+          r4 = nil
+        end
+        if r4
+          r3 = r4
+        else
+          i5, s5 = index, []
+          i6 = index
+          if has_terminal?('"', false, index)
+            r7 = instantiate_node(SyntaxNode,input, index...(index + 1))
+            @index += 1
+          else
+            terminal_parse_failure('"')
+            r7 = nil
+          end
+          if r7
+            r6 = nil
+          else
+            @index = i6
+            r6 = instantiate_node(SyntaxNode,input, index...index)
+          end
+          s5 << r6
+          if r6
+            if index < input_length
+              r8 = instantiate_node(SyntaxNode,input, index...(index + 1))
+              @index += 1
+            else
+              terminal_parse_failure("any character")
+              r8 = nil
+            end
+            s5 << r8
+          end
+          if s5.last
+            r5 = instantiate_node(SyntaxNode,input, i5...index, s5)
+            r5.extend(StringTerm0)
+          else
+            @index = i5
+            r5 = nil
+          end
+          if r5
+            r3 = r5
+          else
+            @index = i3
+            r3 = nil
+          end
         end
         if r3
           s2 << r3
@@ -946,19 +994,19 @@ module D16Asm
       s0 << r2
       if r2
         if has_terminal?('"', false, index)
-          r4 = instantiate_node(SyntaxNode,input, index...(index + 1))
+          r9 = instantiate_node(SyntaxNode,input, index...(index + 1))
           @index += 1
         else
           terminal_parse_failure('"')
-          r4 = nil
+          r9 = nil
         end
-        s0 << r4
+        s0 << r9
       end
     end
     if s0.last
       r0 = instantiate_node(SyntaxNode,input, i0...index, s0)
-      r0.extend(StringTerm0)
       r0.extend(StringTerm1)
+      r0.extend(StringTerm2)
     else
       @index = i0
       r0 = nil

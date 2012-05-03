@@ -419,18 +419,38 @@ class Instruction
     raise Exception.new("This should be subclassed.")
   end
 
+  def p_s(p_or_str)
+    if p_or_str.is_a? String
+      return '"' + p_or_str.gsub('"', '\\"') + '"'
+    elsif p_or_str.is_a? Param
+      return p_or_str.to_s
+    else
+      require 'ruby-debug/debugger'
+    end
+  end
+  
   def labels_address_params
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    return "#{labels}\t%s #{@params.map{|p| p.to_s}.join(", ")} #{addr_line}"
+    return "#{labels}\t%s #{@params.map{|p| p_s(p)}.join(", ")} #{addr_line}"
+  end
+  
+  def p_s_eval(p_or_str)
+    if p_or_str.is_a? String
+      return '"' + p_or_str.gsub('"', '\\"') + '"'
+    elsif p_or_str.is_a? Param
+        return p_or_str.to_s_eval
+    else
+      require 'ruby-debug/debugger'
+    end
   end
   
   def labels_address_params_eval
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    return "#{labels}\t%s #{@params.map{|p| p.is_a?(String) ? '"' + p + '"' : p.to_s_eval}.join(", ")} #{addr_line}"
+    return "#{labels}\t%s #{@params.map{|p| p_s_eval(p)}.join(", ")} #{addr_line}"
   end
 
   # Reconstruct a string rep of this instruction.

@@ -122,9 +122,9 @@ grammar D16Asm
 	end
 	
 	rule string_term
-		'"' [^"]* '"' {
+		'"' ('\"' / !'"' .)* '"' {
 			def content
-				{:type => :string, :token => text_value, :value => text_value[1..-2]}
+				{:type => :string, :token => text_value, :value => text_value[1..-2].gsub(/\\"/, '"')}
 			end
 		}
 	end

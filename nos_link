@@ -1,36 +1,41 @@
 #!/usr/bin/env ruby
 require 'yaml'
 require_relative './lib/trollop'
-KNOWN_LOADERS = ['naive', 'none']
-
-$config = Trollop::options do
-  banner <<-EOS
-USAGE: nos_link -o output_binary assembly_module [space separated list of additional modules]
-EOS
-  opt :output_binary, "Name of the raw format output binary.", :type => :string, :default => "out.dcpu16"
-  opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
-  opt :tree_listing, "Print the parsed 'tree' of instructions.", :type => :boolean
-  opt :pre_bin, "Print an assembly listing of the final program just before fixing.", :type => :boolean
-  opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
-  opt :loader, "Choose which loader stub to use. Choose from: #{KNOWN_LOADERS.join(',')}", :type => :string, :default => KNOWN_LOADERS[0]
-  opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
-  opt :hacking, "Are you hacking on nos_link? You want exceptions, don't you? ", :type => :boolean
-  opt :base_address, "Assemble to a different base address.", :type => :integer, :default => 0
-  opt :unref_symbols, "Print a list of unreferenced symbols and stop.", :type => :boolean
-  opt :symbol_table, "Print the symbol table, then exit.", :type => :boolean
+KNOWN_LOADERS = Dir.entries(File.expand_path("../loaders", __FILE__))
+KNOWN_LOADERS.reject! do |entry|
+	okay = false
+	if entry == '.' || entry == '..' || !(entry[-3..-1] =~ /\.s/i)
+		okay = true
+	end
+	okay
 end
 
-Trollop::die :output_binary, "must be specified" unless $config[:output_binary]
+KNOWN_LOADERS.map! {|l| l[0..-3]}
 
+USAGE = <<-EOS
+
+Basic Use: nos_link file1.s [file2.s file3.s]
+EOS
+
+$config = Trollop::options do
+  banner USAGE + "\nOPTIONS:"
+  opt :output_binary, "Name of the raw format output binary.", :type => :string, :default => "out.dcpu16"
+  opt :loader, "Choose which loader stub to use. Choose from: [#{KNOWN_LOADERS.join(', ')}]", :type => :string, :default => KNOWN_LOADERS[0]
+  opt :base_address, "Assemble to a different base address.", :type => :integer, :default => 0, :short => 'a'
+  opt :input_files, "A path to a list of modules to link. One entry per line", :type => :string
+  opt :unref_symbols, "Print a list of unreferenced symbols and stop.", :type => :boolean
+  opt :listing, "Print a listing of what's going to be assembled and quit.", :type => :boolean
+  opt :tree_listing, "Print the parsed 'tree' of instructions.", :type => :boolean
+  opt :pre_bin, "Print an assembly listing of the final program just before parameter eval.", :type => :boolean
+  opt :bin_listing, "Print a listing with binary operation values.", :type => :boolean
+  opt :symbol_table, "Print the symbol table, then exit.", :type => :boolean
+  opt :hacking, "Are you hacking on nos_link? You want exceptions, don't you? ", :type => :boolean
+end
 
 #============LINKER=============
 
 require_relative './linker/parser.rb'
 require_relative './linker/assembler.rb'
-
-
-# require File.expand_path(File.dirname(__FILE__) + '/linker/parser.rb')
-# require File.expand_path(File.dirname(__FILE__) + '/linker/assembler.rb')
 
 instruction_stream = []
 symbol_table = {}
@@ -46,6 +51,7 @@ end
 
 if input_files.size == 0
   puts "No input files."
+  puts USAGE
   exit 1
 end
 

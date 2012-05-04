@@ -188,7 +188,7 @@ class Assemblinker
         end
       end
       
-      puts "#{instr.to_s_eval} \t ;#{binstr}"
+      puts "#{instr.to_s_eval} \t ; #{binstr}"
     end
   end
   

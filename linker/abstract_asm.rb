@@ -433,7 +433,7 @@ class Instruction
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    return "#{labels}\t%s #{@params.map{|p| p_s(p)}.join(", ")} #{addr_line}"
+    return "#{labels}\t%s #{"%-16s" % @params.map{|p| p_s(p)}.join(", ")} #{addr_line}"
   end
   
   def p_s_eval(p_or_str)
@@ -445,12 +445,12 @@ class Instruction
       require 'ruby-debug/debugger'
     end
   end
-  
+
   def labels_address_params_eval
     labels = @defined_symbols.map{|label| ":#{label.name}"}.join("\n")
     labels << "\n" unless labels.empty?
     addr_line = @address ? "\t; [0x#{address.to_s(16)}]" : ''
-    return "#{labels}\t%s #{@params.map{|p| p_s_eval(p)}.join(", ")} #{addr_line}"
+    return "#{labels}\t%s #{"%-16s" % @params.map{|p| p_s_eval(p)}.join(", ")} #{addr_line}"
   end
 
   # Reconstruct a string rep of this instruction.

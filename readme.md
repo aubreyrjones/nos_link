@@ -3,21 +3,23 @@ NOS LINK
 
 This is an assembling linker, or linking assembler, for the 0x10c DCPU-16 v1.7.
 
-It accepts Notch-style assembly code. You may specify as many assembly files as you wish, and they will be linked and assembled into a single binary.
+It accepts Notch-style assembly code. You may specify as many assembly files as you wish, and they will be linked and assembled into a single binary. At the moment, linking only really means that cross-module references are resolved properly and that local and hidden variables are mangled into a coherent symbol table.
 
 References and symbols are tracked. As the core stabilizes, this will allow for several powerful optimizations and features.
+
+For example, the linking phase will soon include removal of unused code (specifically functions and data blocks).  And eventually nos_link (with an appropriate loader) will build overlayed modules with automatic disk paging.
 
 
 Prerequisites
 -------------
-You'll need Ruby 1.9+. Or jRuby 1.6+ in 1.9 mode. They should operate identically, but the startup time on jRuby is much longer than the time it takes to actually link and assemble a program.
+You'll need Ruby 1.9.1+. Or jRuby 1.6+ in 1.9 mode. They should operate identically, but the startup time on jRuby is much longer than the time it takes to actually link and assemble a program.
 
-If you're running apt-based linux, here is the basic recipe to get up to speed. This may not be the ideal way to install this stuff, but it's the easiest. rpm- or source-based distros will use basically the same approach.
+If you're running apt-based linux, here is the basic recipe to get up to speed. This may not be the ideal way to install this stuff, but it's the easiest. rpm- or source-based distros will use basically the same approach. Note that your package names may be slightly different for the ruby install.
 
-    > sudo apt-get install ruby1.9 rubygems1.9
+    > sudo apt-get install ruby1.9-full rubygems1.9
     > sudo gem install treetop polyglot
 
-On windows, I'm not entirely sure what to do. But, you need to install ruby from http://www.ruby-lang.org. And you need to install http://rubygems.org.
+On windows, I'm not entirely sure what to do. But, you need to install ruby 1.9.1+ from http://www.ruby-lang.org. And you need to install http://rubygems.org.
 
 If you're a ruby or nos hacker, or on OSX, I strongly suggest you install and use RVM. On OSX, this may be required to get a good ruby
 1.9 implementation. http://rvm.io
@@ -35,7 +37,7 @@ The default output file is 'out.dcpu16' in the current directory. If you want so
 Try --help for more information and options.
 
 
-Assembler Syntax and Directives
+Assembler Syntax
 ------------------------------
 
 nos_link accepts Notch-style label names, or traditional label names. These differ only in the location of the colon.
@@ -122,6 +124,8 @@ Data example:
   .word string_example
 ```
 
+Directives
+----------
     
 Currently the only actively supported assembler directive is '.hidden' (which may also be spelled '.private'). The .hidden directive indicates to the linker that the given label is not available for reference from the rest of the program. Additionally, it indicates that the .hidden symbol should be preferred to global symbols of the same name for references from within the same assembly module.
 
@@ -142,6 +146,6 @@ Any given program may specify only one loader.
 
 By default, programs are linked with the 'naive' loader. This loader jsr's to 'main'. When (if) that returns, the dcpu enters an infinite loop. If you don't have 'main' defined, you will get a link error. Define 'main', or use a different loader.
 
-If you don't want to use any loader, you can use the 'none' loader. This is necessary for test cases, and is definitely okay for single-module programs. But, overall, this is a bad idea. As nos_link becomes more advanced in its optimizations and analysis, there may be no guarantees made as to the order of modules (or that they will be retained in their entirety).
+If you don't want to use any loader, you can use the 'none' loader. This is necessary for test cases, and is definitely okay for single-module programs. But, overall, this is a bad idea. As nos_link becomes more advanced in its optimizations and features, there may be no guarantees made as to the order or location of non-loader modules (or that they will be retained in their entirety).
 
 For a list of available loaders, use the '--help' option. You can add new loaders by dropping their assembly files into the 'loaders' subdirectory of the nos_link project.
